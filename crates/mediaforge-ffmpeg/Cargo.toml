@@ -1,0 +1,22 @@
+[package]
+name = "mediaforge-ffmpeg"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ffmpeg-next = { version = "8.1.0", default-features = false, features = [
+  "codec",
+  "filter",
+  "format",
+  "software-resampling",
+  "software-scaling",
+] }
+mediaforge-core.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

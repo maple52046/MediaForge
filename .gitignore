@@ -142,3 +142,8 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 docs/plans/manuscripts/*.md
+
+# Rust and bundled media dependencies
+target/
+vendor/ffmpeg/
+src-tauri/gen/

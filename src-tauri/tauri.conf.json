@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MediaForge",
+  "version": "0.1.0",
+  "identifier": "app.mediaforge.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "MediaForge",
+        "width": 1180,
+        "height": 820,
+        "minWidth": 920,
+        "minHeight": 680,
+        "center": true,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost blob: data:; media-src 'self' asset: http://asset.localhost blob:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost",
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "resources": {
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../vendor/ffmpeg/macos-arm64/share/licenses/ffmpeg/COPYING.LGPLv2.1": "licenses/ffmpeg/COPYING.LGPLv2.1",
+      "../vendor/ffmpeg/macos-arm64/share/licenses/ffmpeg/COPYING.LGPLv3": "licenses/ffmpeg/COPYING.LGPLv3",
+      "../vendor/ffmpeg/macos-arm64/share/licenses/lame/COPYING": "licenses/lame/COPYING"
+    },
+    "category": "Video",
+    "shortDescription": "Focused media conversion for macOS",
+    "longDescription": "Probe, preview, trim, and convert one media file at a time.",
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": null,
+      "frameworks": [
+        "../vendor/ffmpeg/macos-arm64/lib/libavcodec.62.dylib",
+        "../vendor/ffmpeg/macos-arm64/lib/libavfilter.11.dylib",
+        "../vendor/ffmpeg/macos-arm64/lib/libavformat.62.dylib",
+        "../vendor/ffmpeg/macos-arm64/lib/libavutil.60.dylib",
+        "../vendor/ffmpeg/macos-arm64/lib/libswresample.6.dylib",
+        "../vendor/ffmpeg/macos-arm64/lib/libswscale.9.dylib",
+        "../vendor/ffmpeg/macos-arm64/lib/libmp3lame.0.dylib"
+      ]
+    }
+  }
+}

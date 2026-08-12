@@ -1,0 +1,27 @@
+[workspace]
+members = [
+  "crates/mediaforge-core",
+  "crates/mediaforge-ffmpeg",
+  "src-tauri",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.85"
+
+[workspace.dependencies]
+mediaforge-core = { path = "crates/mediaforge-core" }
+mediaforge-ffmpeg = { path = "crates/mediaforge-ffmpeg" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = "deny"
+pedantic = "deny"

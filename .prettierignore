@@ -1,0 +1,13 @@
+dist/
+node_modules/
+target/
+vendor/
+src-tauri/gen/
+src-tauri/icons/
+package-lock.json
+AGENTS.md
+.agents/
+.cursor/
+docs/plans/
+docs/standards/
+skills/
