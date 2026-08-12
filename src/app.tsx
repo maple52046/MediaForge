@@ -34,6 +34,7 @@ export function App() {
   const { t } = useTranslation();
   const mediaElementRef = useRef<HTMLMediaElement | null>(null);
   const selectionPlayback = useRef(false);
+  // Invariant: defer window destruction until a terminal event confirms backend cleanup.
   const closeAfterCancellation = useRef(false);
   const [media, setMedia] = useState<MediaInfo>();
   const [capabilities, setCapabilities] = useState<BackendCapabilities>();
@@ -48,6 +49,9 @@ export function App() {
   const [error, setError] = useState<ApiError>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const active = isActiveJob(jobState);
+  const reportRejectedOperation = useCallback((operation: Promise<unknown>) => {
+    void operation.catch((value: unknown) => setError(toApiError(value)));
+  }, []);
 
   const selectMedia = useCallback(
     async (path: string) => {
@@ -59,7 +63,8 @@ export function App() {
         const loaded = await loadMedia(path);
         const defaultMode = loaded.availableOutputModes[0];
         if (defaultMode === undefined) {
-          throw { code: "unsupportedInput", message: "No output mode is available." };
+          setError({ code: "unsupportedInput", message: "No output mode is available." });
+          return;
         }
         setMedia(loaded);
         setMode(defaultMode);
@@ -76,87 +81,91 @@ export function App() {
   );
 
   useEffect(() => {
-    void getBackendCapabilities()
-      .then(setCapabilities)
-      .catch((value: unknown) => setError(toApiError(value)));
+    reportRejectedOperation(getBackendCapabilities().then(setCapabilities));
     let disposed = false;
     let cleanup: (() => void) | undefined;
-    void listenToJobEvents((event) => {
-      if (event.type === "preparing") {
-        setJobState("preparing");
-      } else if (event.type === "progress") {
-        setJobState("running");
-        setPercent(event.percent);
-      } else if (event.type === "completed") {
-        setJobState("completed");
-        setPercent(100);
-        if (closeAfterCancellation.current) {
-          void getCurrentWindow().destroy();
+    reportRejectedOperation(
+      listenToJobEvents((event) => {
+        if (event.type === "preparing") {
+          setJobState("preparing");
+        } else if (event.type === "progress") {
+          setJobState("running");
+          setPercent(event.percent);
+        } else if (event.type === "completed") {
+          setJobState("completed");
+          setPercent(100);
+          if (closeAfterCancellation.current) {
+            reportRejectedOperation(getCurrentWindow().destroy());
+          }
+        } else if (event.type === "cancelled") {
+          setJobState("cancelled");
+          if (closeAfterCancellation.current) {
+            reportRejectedOperation(getCurrentWindow().destroy());
+          }
+        } else {
+          setJobState("failed");
+          setError(event.error);
+          if (closeAfterCancellation.current) {
+            reportRejectedOperation(getCurrentWindow().destroy());
+          }
         }
-      } else if (event.type === "cancelled") {
-        setJobState("cancelled");
-        if (closeAfterCancellation.current) {
-          void getCurrentWindow().destroy();
+      }).then((unlisten) => {
+        if (disposed) {
+          unlisten();
+        } else {
+          cleanup = unlisten;
         }
-      } else {
-        setJobState("failed");
-        setError(event.error);
-        if (closeAfterCancellation.current) {
-          void getCurrentWindow().destroy();
-        }
-      }
-    }).then((unlisten) => {
-      if (disposed) {
-        unlisten();
-      } else {
-        cleanup = unlisten;
-      }
-    });
+      }),
+    );
     return () => {
       disposed = true;
       cleanup?.();
     };
-  }, []);
+  }, [reportRejectedOperation]);
 
   useEffect(() => {
     const appWindow = getCurrentWindow();
     let disposed = false;
     const cleanups: Array<() => void> = [];
-    void appWindow
-      .onDragDropEvent((event) => {
-        if (event.payload.type === "drop") {
-          const firstPath = event.payload.paths[0];
-          if (firstPath !== undefined) {
-            void selectMedia(firstPath);
+    reportRejectedOperation(
+      appWindow
+        .onDragDropEvent((event) => {
+          if (event.payload.type === "drop") {
+            const firstPath = event.payload.paths[0];
+            if (firstPath !== undefined) {
+              reportRejectedOperation(selectMedia(firstPath));
+            }
           }
-        }
-      })
-      .then((cleanup) => {
-        if (disposed) cleanup();
-        else cleanups.push(cleanup);
-      });
-    void appWindow
-      .onCloseRequested(async (event) => {
-        if (active && !window.confirm(t("closeActive"))) {
-          event.preventDefault();
-        } else if (active && jobId !== undefined) {
-          event.preventDefault();
-          closeAfterCancellation.current = true;
-          await cancelTranscode(jobId).catch((value: unknown) => {
-            closeAfterCancellation.current = false;
-            setError(toApiError(value));
-          });
-        }
-      })
-      .then((cleanup) => {
-        if (disposed) cleanup();
-        else cleanups.push(cleanup);
-      });
+        })
+        .then((cleanup) => {
+          if (disposed) cleanup();
+          else cleanups.push(cleanup);
+        }),
+    );
+    reportRejectedOperation(
+      appWindow
+        .onCloseRequested(async (event) => {
+          if (active && !window.confirm(t("closeActive"))) {
+            event.preventDefault();
+          } else if (active && jobId !== undefined) {
+            event.preventDefault();
+            closeAfterCancellation.current = true;
+            await cancelTranscode(jobId).catch((value: unknown) => {
+              closeAfterCancellation.current = false;
+              setError(toApiError(value));
+            });
+          }
+        })
+        .then((cleanup) => {
+          if (disposed) cleanup();
+          else cleanups.push(cleanup);
+        }),
+    );
     return () => {
       disposed = true;
       cleanups.forEach((cleanup) => cleanup());
     };
-  }, [active, jobId, selectMedia, t]);
+  }, [active, jobId, reportRejectedOperation, selectMedia, t]);
 
   useEffect(() => {
     if (selectionPlayback.current && currentMs >= trim.endMs) {
@@ -253,7 +262,11 @@ export function App() {
         </Box>
         <HStack>
           {media !== undefined && (
-            <Button variant="outline" disabled={active} onClick={() => void browseMedia()}>
+            <Button
+              variant="outline"
+              disabled={active}
+              onClick={() => reportRejectedOperation(browseMedia())}
+            >
               {t("actions.change")}
             </Button>
           )}
@@ -276,7 +289,7 @@ export function App() {
           </Box>
         )}
         {media === undefined ? (
-          <MediaDropZone busy={active} onBrowse={() => void browseMedia()} />
+          <MediaDropZone busy={active} onBrowse={() => reportRejectedOperation(browseMedia())} />
         ) : (
           <Grid templateColumns="minmax(0, 1fr) 22rem" gap="5" alignItems="start">
             <Box>
@@ -311,10 +324,12 @@ export function App() {
                 onModeChange={changeMode}
                 onQualityChange={setQuality}
                 onOutputPathChange={setOutputPath}
-                onBrowseOutput={() => void browseOutput()}
-                onConvert={() => void beginConversion()}
+                onBrowseOutput={() => reportRejectedOperation(browseOutput())}
+                onConvert={() => reportRejectedOperation(beginConversion())}
                 onCancel={() => {
-                  if (jobId !== undefined) void cancelTranscode(jobId);
+                  if (jobId !== undefined) {
+                    reportRejectedOperation(cancelTranscode(jobId));
+                  }
                 }}
               />
             </Box>

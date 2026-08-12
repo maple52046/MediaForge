@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { i18n, loadLanguagePreference, resolveLanguage, setLanguagePreference } from "./i18n";
 
@@ -20,5 +20,12 @@ describe("language preference", () => {
     await setLanguagePreference("zh-TW");
     expect(loadLanguagePreference()).toBe("zh-TW");
     expect(i18n.language).toBe("zh-TW");
+  });
+
+  it("does not persist a preference that cannot be activated", async () => {
+    vi.spyOn(i18n, "changeLanguage").mockRejectedValueOnce(new Error("activation failed"));
+
+    await expect(setLanguagePreference("zh-TW")).rejects.toThrow("activation failed");
+    expect(loadLanguagePreference()).toBe("system");
   });
 });

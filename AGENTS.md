@@ -4,10 +4,28 @@ Guidance for AI agents (and human contributors) working in this repository.
 This project uses **Rust as its primary implementation language** and
 **TypeScript as a secondary implementation language**.
 
-## Before doing any development work
+## Mandatory development workflow
+
+Any task that creates or modifies repository artifacts MUST follow
+[`skills/develop-by-standards/SKILL.md`](skills/develop-by-standards/SKILL.md),
+even when the agent does not automatically select that skill. This requirement
+applies to source code, tests, configuration, scripts, documentation, plans,
+and agent tooling.
+
+The workflow is fail-closed: before editing, read the applicable standards and
+create or update the relevant plan manuscript; before handoff, run the required
+automated checks and complete the semantic audit. Do not claim completion while
+a required check is failing or a known deviation is undisclosed.
+
+## Development standards
 
 If you are going to write or modify code (or other project artifacts), you MUST
 read and follow these project standards first:
+
+- **Development workflow** -
+  [`docs/standards/development-workflow.md`](docs/standards/development-workflow.md):
+  the mandatory preflight, implementation, verification, semantic audit, and
+  handoff gates for every repository change.
 
 - **Architecture** - [`docs/standards/architecture.md`](docs/standards/architecture.md):
   the Clean Architecture dependency rule. Dependencies point inward only; the
@@ -32,7 +50,9 @@ read and follow these project standards first:
   documentation comments are always expected where the style standard requires
   them.
 
-Read the relevant standard(s) before editing, and keep your changes compliant.
+Read each applicable standard completely before editing, and keep it open as a
+binding acceptance criterion throughout the task. Existing non-compliant code
+is not precedent for new work.
 
 ## Additional standards (read when relevant)
 
@@ -66,4 +86,5 @@ Task-specific operating guides live under `skills/` (see
 the current task matches its purpose. Codex discovers repository skill entry
 points under `.agents/skills/` and consumes this `AGENTS.md` directly. Cursor
 exposes the same canonical skills as `/`-commands via thin wrappers under
-`.cursor/skills/`.
+`.cursor/skills/`. The mandatory development workflow above is the exception to
+task-specific selection: use it for every artifact-changing task.

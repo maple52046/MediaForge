@@ -18,6 +18,16 @@ interface ConversionPanelProps {
   readonly onCancel: () => void;
 }
 
+const AUDIO_QUALITIES: readonly AudioQuality[] = ["high", "medium", "low"];
+
+function isAudioQuality(value: string): value is AudioQuality {
+  return AUDIO_QUALITIES.some((quality) => quality === value);
+}
+
+function isAvailableMode(value: string, modes: readonly OutputMode[]): value is OutputMode {
+  return modes.some((mode) => mode === value);
+}
+
 /** Output recipe, destination, progress, and job actions. */
 export function ConversionPanel(props: ConversionPanelProps) {
   const { t } = useTranslation();
@@ -34,7 +44,12 @@ export function ConversionPanel(props: ConversionPanelProps) {
         className="native-select"
         value={props.mode}
         disabled={active}
-        onChange={(event) => props.onModeChange(event.currentTarget.value as OutputMode)}
+        onChange={(event) => {
+          const nextMode = event.currentTarget.value;
+          if (isAvailableMode(nextMode, props.modes)) {
+            props.onModeChange(nextMode);
+          }
+        }}
       >
         {props.modes.map((mode) => (
           <option key={mode} value={mode}>
@@ -51,9 +66,14 @@ export function ConversionPanel(props: ConversionPanelProps) {
             className="native-select"
             value={props.quality}
             disabled={active}
-            onChange={(event) => props.onQualityChange(event.currentTarget.value as AudioQuality)}
+            onChange={(event) => {
+              const nextQuality = event.currentTarget.value;
+              if (isAudioQuality(nextQuality)) {
+                props.onQualityChange(nextQuality);
+              }
+            }}
           >
-            {(["high", "medium", "low"] as const).map((quality) => (
+            {AUDIO_QUALITIES.map((quality) => (
               <option key={quality} value={quality}>
                 {t(`conversion.${quality}`)}
               </option>

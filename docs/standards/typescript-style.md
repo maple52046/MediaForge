@@ -24,6 +24,10 @@ drive day-to-day judgment. It is self-contained for open-source use.
 
 - Use ES modules and named exports. Do not use default exports, TypeScript
   namespaces, `/// <reference>`, or `import x = require(...)`.
+- A tool-owned configuration entry point may use a default export only when its
+  loader contract requires one. Keep the exception in that outermost config
+  file and record the external constraint at the export; application modules
+  remain named-export only.
 - Use `import type` and `export type` for symbols used only as types. Prefer
   relative imports inside a package and avoid deep parent traversal.
 - Export only symbols used outside the module; never export mutable bindings.

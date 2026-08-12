@@ -192,6 +192,7 @@ impl TauriProgressObserver {
 
 impl ProgressObserver for TauriProgressObserver {
     fn on_progress(&self, update: ProgressUpdate) {
+        // Invariant: concurrent backend callbacks cannot regress the time shown by the UI.
         let processed_ms = self
             .last_processed_ms
             .fetch_max(update.processed_ms, Ordering::AcqRel)
@@ -199,6 +200,7 @@ impl ProgressObserver for TauriProgressObserver {
         let Ok(mut last_emit) = self.last_emit.lock() else {
             return;
         };
+        // Contract: the terminal sample bypasses throttling so completion reaches the UI promptly.
         if last_emit.elapsed() < Duration::from_millis(100) && processed_ms < update.total_ms {
             return;
         }
@@ -256,6 +258,7 @@ pub(crate) fn start_job<B: MediaBackend>(
         cancellation: Arc::clone(&cancellation),
     };
     {
+        // Invariant: reserving the slot under the registry lock makes concurrent starts exclusive.
         let mut current = registry.current.lock()?;
         if current.as_ref().is_some_and(|job| job.state.is_active()) {
             return Err(ApiErrorDto::from(MediaError::JobActive));
@@ -275,6 +278,7 @@ pub(crate) fn start_job<B: MediaBackend>(
         output_path: dto.output_path,
     };
     let task_app = app.clone();
+    // Constraint: FFmpeg performs blocking native work and must stay off async runtime workers.
     tauri::async_runtime::spawn_blocking(move || {
         set_job_state(&registry, &id, JobState::Running);
         let observer = TauriProgressObserver::new(task_app.clone(), id.clone());
@@ -302,6 +306,7 @@ pub(crate) fn start_job<B: MediaBackend>(
                 )
             }
         };
+        // Invariant: observers see terminal state before reacting to the terminal event.
         set_job_state(&registry, &id, state);
         if let Err(error) = task_app.emit(JOB_EVENT_NAME, event) {
             tracing::warn!(job_id = %id, error = %error, "terminal event delivery failed");

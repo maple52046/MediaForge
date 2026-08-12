@@ -15,6 +15,10 @@ interface SettingsDialogProps {
   readonly onClose: () => void;
 }
 
+function isLanguagePreference(value: string): value is LanguagePreference {
+  return value === "system" || value === "zh-TW" || value === "en";
+}
+
 /** Language preference and diagnostic backend information. */
 export function SettingsDialog({ open, capabilities, onClose }: SettingsDialogProps) {
   const { t } = useTranslation();
@@ -36,9 +40,13 @@ export function SettingsDialog({ open, capabilities, onClose }: SettingsDialogPr
                 className="native-select"
                 value={language}
                 onChange={(event) => {
-                  const preference = event.currentTarget.value as LanguagePreference;
-                  setLanguage(preference);
-                  void setLanguagePreference(preference);
+                  const preference = event.currentTarget.value;
+                  if (isLanguagePreference(preference)) {
+                    setLanguage(preference);
+                    void setLanguagePreference(preference).catch(() => {
+                      setLanguage(loadLanguagePreference());
+                    });
+                  }
                 }}
               >
                 <option value="system">{t("settings.system")}</option>

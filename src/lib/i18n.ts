@@ -177,16 +177,21 @@ export function loadLanguagePreference(): LanguagePreference {
 
 /** Persists and activates a language preference. */
 export async function setLanguagePreference(preference: LanguagePreference): Promise<void> {
-  window.localStorage.setItem(LANGUAGE_KEY, preference);
   await i18n.changeLanguage(resolveLanguage(preference, window.navigator.language));
+  window.localStorage.setItem(LANGUAGE_KEY, preference);
 }
 
 const preference = loadLanguagePreference();
-void i18n.use(initReactI18next).init({
-  resources,
-  lng: resolveLanguage(preference, window.navigator.language),
-  fallbackLng: "en",
-  interpolation: { escapeValue: false },
-});
+void i18n
+  .use(initReactI18next)
+  .init({
+    resources,
+    lng: resolveLanguage(preference, window.navigator.language),
+    fallbackLng: "en",
+    interpolation: { escapeValue: false },
+  })
+  .catch((value: unknown) => {
+    console.error("Failed to initialize localization", value);
+  });
 
 export { i18n };

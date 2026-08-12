@@ -21,6 +21,9 @@ export function MediaPreview({ media, mediaRef, onTimeChange, onEnded }: MediaPr
   const handleTimeUpdate = (event: SyntheticEvent<HTMLMediaElement>) => {
     onTimeChange(Math.round(event.currentTarget.currentTime * 1_000));
   };
+  const assignMediaElement = (element: HTMLMediaElement | null) => {
+    mediaRef.current = element;
+  };
 
   return (
     <Box className="preview-shell">
@@ -28,7 +31,7 @@ export function MediaPreview({ media, mediaRef, onTimeChange, onEnded }: MediaPr
         <Text color="fg.muted">{t("preview.unavailable")}</Text>
       ) : media.video === undefined ? (
         <audio
-          ref={mediaRef as RefObject<HTMLAudioElement | null>}
+          ref={assignMediaElement}
           src={source}
           controls
           onError={() => setUnavailable(true)}
@@ -37,7 +40,7 @@ export function MediaPreview({ media, mediaRef, onTimeChange, onEnded }: MediaPr
         />
       ) : (
         <video
-          ref={mediaRef as RefObject<HTMLVideoElement | null>}
+          ref={assignMediaElement}
           src={source}
           controls
           onError={() => setUnavailable(true)}

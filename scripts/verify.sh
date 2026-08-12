@@ -13,9 +13,10 @@ export DYLD_FALLBACK_LIBRARY_PATH="${PREFIX}/lib"
 
 cd "${PROJECT_DIR}"
 npm run format:check
+npm run typecheck
 npm run lint
 npm run test
 npm run build
 cargo fmt --check
-cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace

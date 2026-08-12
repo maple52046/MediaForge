@@ -16,6 +16,7 @@ and must be listed in the Skill Index below.
 
 | Skill | Path | When to Use |
 | --- | --- | --- |
+| Develop by Standards | `skills/develop-by-standards/SKILL.md` | Mandatory for every task that changes source code, tests, configuration, scripts, documentation, plans, or agent tooling. Triggered by `/develop-by-standards` and required by `AGENTS.md` even without explicit invocation. |
 | Git Commit | `skills/git-commit/SKILL.md` | When the task needs to analyse the repository's changes, draft a Conventional Commits message, and optionally run `git commit` / `git push`. Triggered by `/git-commit`. |
 | Summarize Manuscript Plans | `skills/summarize-manuscript-plans/SKILL.md` | When the task needs to consolidate, summarize, or roll up the AI plan manuscripts under `docs/plans/manuscripts/` into a single long-term plan (following `docs/plans/manuscripts/README.md`) and then delete the original draft manuscripts (never `README.md`). Triggered by `/summarize-manuscript-plans`. |
 

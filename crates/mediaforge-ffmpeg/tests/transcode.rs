@@ -1,3 +1,5 @@
+//! End-to-end tests for the `FFmpeg` adapter's public transcode contract.
+
 use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;

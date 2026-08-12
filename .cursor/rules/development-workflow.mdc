@@ -1,0 +1,12 @@
+---
+description: Apply the mandatory development standards workflow to every repository change.
+alwaysApply: true
+---
+
+# Mandatory Development Workflow
+
+Before changing any repository artifact, read and follow
+[`skills/develop-by-standards/SKILL.md`](../../skills/develop-by-standards/SKILL.md).
+Treat its preflight, verification, semantic-audit, and handoff steps as required
+acceptance gates. Do not claim completion while a required check is failing or
+a known deviation is undisclosed.

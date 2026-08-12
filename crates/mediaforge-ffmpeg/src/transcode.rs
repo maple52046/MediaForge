@@ -21,6 +21,7 @@ pub(super) fn run(
 ) -> Result<(), MediaError> {
     validate_paths(request)?;
     validate_encoders(request.mode)?;
+    // Invariant: the destination is never the active mux target, so failure cannot corrupt it.
     let temporary = TemporaryOutput::new(&request.output_path)?;
     let result = transcode_to(request, temporary.path(), observer, cancellation);
     match result {
@@ -39,6 +40,7 @@ fn transcode_to(
     observer: &dyn ProgressObserver,
     cancellation: &dyn Cancellation,
 ) -> Result<(), MediaError> {
+    // Contract: FFmpeg I/O interruption maps cancellation to a stable domain error.
     let mut input =
         format::input_with_interrupt(&request.input_path, || cancellation.is_cancelled()).map_err(
             |error| {
@@ -313,6 +315,7 @@ impl VideoTranscoder {
             video_encoder.set_flags(codec::Flags::GLOBAL_HEADER);
         }
         let mut options = Dictionary::new();
+        // Constraint: permit Apple's VideoToolbox fallback without substituting a GPL encoder.
         options.set("allow_sw", "1");
         options.set("realtime", "1");
         let video_encoder = video_encoder
@@ -739,6 +742,7 @@ fn milliseconds_to_global_timestamp(milliseconds: u64) -> i64 {
 
 struct TemporaryOutput {
     path: PathBuf,
+    // Invariant: this flips only after the final rename succeeds.
     committed: bool,
 }
 
@@ -771,6 +775,7 @@ impl TemporaryOutput {
     }
 
     fn commit(mut self, output_path: &Path, overwrite: bool) -> Result<(), MediaError> {
+        // Risk: repeat the existence check here to close the race after request validation.
         if output_path.exists() && !overwrite {
             return Err(MediaError::OutputExists(output_path.to_path_buf()));
         }
@@ -784,6 +789,7 @@ impl TemporaryOutput {
 impl Drop for TemporaryOutput {
     fn drop(&mut self) {
         if !self.committed {
+            // Operational context: cleanup is best-effort so the original media error stays primary.
             let _ = fs::remove_file(&self.path);
         }
     }

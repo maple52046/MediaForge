@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
+// Constraint: Vite loads its configuration through this default-export entry point.
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,

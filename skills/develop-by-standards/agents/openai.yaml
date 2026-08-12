@@ -1,0 +1,4 @@
+interface:
+  display_name: "Develop by Standards"
+  short_description: "Enforce repository standards for every project change"
+  default_prompt: "Use $develop-by-standards to implement this change under every repository standard."
