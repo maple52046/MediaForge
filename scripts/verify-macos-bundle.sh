@@ -14,13 +14,13 @@ if [[ ! -x "${EXECUTABLE}" ]]; then
 fi
 
 for library in \
-  libavcodec.62.dylib \
-  libavfilter.11.dylib \
-  libavformat.62.dylib \
-  libavutil.60.dylib \
-  libswresample.6.dylib \
-  libswscale.9.dylib \
-  libmp3lame.0.dylib; do
+  libavcodec.dylib \
+  libavfilter.dylib \
+  libavformat.dylib \
+  libavutil.dylib \
+  libswresample.dylib \
+  libswscale.dylib \
+  libmp3lame.dylib; do
   if [[ ! -e "${FRAMEWORKS_DIR}/${library}" ]]; then
     echo "Missing bundled media library: ${library}" >&2
     exit 1

@@ -2,14 +2,15 @@
 
 ## Unsigned v0.1 artifacts
 
-`npm run bundle:macos` builds checksummed LGPL media dependencies, creates an
-Apple Silicon app and DMG, and rejects Homebrew, `/usr/local`, or project-local
-dynamic-library references. The deployment target is macOS 12.
+`npm run bundle:macos` builds LGPL media dependencies from the pinned FFmpeg
+submodule and checksummed LAME source, creates an Apple Silicon app and DMG,
+and rejects Homebrew, `/usr/local`, or project-local dynamic-library
+references. The deployment target is macOS 12.
 
 Before publishing, copy `THIRD_PARTY_NOTICES.md` and the generated dependency
-license directory alongside the downloadable artifacts. Retain the exact
-source archives named in the notices or keep their upstream URLs available for
-the required source-offer period.
+license directory alongside the downloadable artifacts. Retain the repository
+gitlink and exact LAME source archive named in the notices, or keep their
+upstream URLs available for the required source-offer period.
 
 Unsigned downloads are expected to trigger Gatekeeper. For local testing,
 control-click the app and choose Open. Do not tell users to disable Gatekeeper

@@ -1,6 +1,7 @@
 //! Domain contracts and application policy for `MediaForge`.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use thiserror::Error;
 
@@ -259,6 +260,9 @@ pub trait MediaBackend: Send + Sync + 'static {
 
     /// Transcodes one validated request and commits the final output.
     ///
+    /// The backend owns a shared cancellation handle because native I/O may
+    /// retain its interrupt callback until this method returns.
+    ///
     /// # Errors
     ///
     /// Returns a categorized media error on validation, cancellation, codec,
@@ -267,7 +271,7 @@ pub trait MediaBackend: Send + Sync + 'static {
         &self,
         request: &TranscodeRequest,
         observer: &dyn ProgressObserver,
-        cancellation: &dyn Cancellation,
+        cancellation: Arc<dyn Cancellation>,
     ) -> Result<(), MediaError>;
 }
 

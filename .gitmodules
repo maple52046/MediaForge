@@ -1,0 +1,4 @@
+[submodule "third_parties/FFmpeg"]
+	path = third_parties/FFmpeg
+	url = https://github.com/FFmpeg/FFmpeg.git
+	branch = release/9.0

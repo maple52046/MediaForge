@@ -282,7 +282,7 @@ pub(crate) fn start_job<B: MediaBackend>(
     tauri::async_runtime::spawn_blocking(move || {
         set_job_state(&registry, &id, JobState::Running);
         let observer = TauriProgressObserver::new(task_app.clone(), id.clone());
-        let result = backend.transcode(&request, &observer, cancellation.as_ref());
+        let result = backend.transcode(&request, &observer, cancellation);
         let (state, event) = match result {
             Ok(()) => (
                 JobState::Completed,

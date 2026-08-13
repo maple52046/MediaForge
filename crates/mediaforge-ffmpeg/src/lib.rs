@@ -2,6 +2,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 use ffmpeg_next as ffmpeg;
 use mediaforge_core::{
@@ -97,7 +98,7 @@ impl MediaBackend for FfmpegBackend {
         &self,
         request: &TranscodeRequest,
         observer: &dyn ProgressObserver,
-        cancellation: &dyn Cancellation,
+        cancellation: Arc<dyn Cancellation>,
     ) -> Result<(), MediaError> {
         transcode::run(request, observer, cancellation)
     }

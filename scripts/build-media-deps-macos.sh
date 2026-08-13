@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly FFMPEG_VERSION="8.1.1"
-readonly FFMPEG_SHA256="b6863adde98898f42602017462871b5f6333e65aec803fdd7a6308639c52edf3"
+readonly FFMPEG_RELEASE="n9.0.1"
 readonly LAME_VERSION="3.100"
 readonly LAME_SHA256="ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
-readonly BUILD_FINGERPRINT="ffmpeg-${FFMPEG_VERSION}-${FFMPEG_SHA256}-lame-${LAME_VERSION}-${LAME_SHA256}-recipe-2"
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+readonly FFMPEG_SOURCE_DIR="${PROJECT_DIR}/third_parties/FFmpeg"
 readonly PREFIX="${PROJECT_DIR}/vendor/ffmpeg/macos-arm64"
 readonly CACHE_DIR="${TMPDIR:-/tmp}/mediaforge-source-cache"
 readonly WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mediaforge-media-deps.XXXXXX")"
@@ -23,18 +22,49 @@ if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
   exit 1
 fi
 
-if [[ -f "${PREFIX}/.build-fingerprint" ]] && \
-  [[ "$(<"${PREFIX}/.build-fingerprint")" == "${BUILD_FINGERPRINT}" ]]; then
-  echo "Using verified media dependencies in ${PREFIX}"
-  exit 0
-fi
-
-for tool in clang curl install_name_tool make otool pkg-config shasum tar; do
+for tool in clang curl git install_name_tool make otool pkg-config shasum tar; do
   if ! command -v "${tool}" >/dev/null 2>&1; then
     echo "Missing required tool: ${tool}" >&2
     exit 1
   fi
 done
+
+if [[ ! -f "${FFMPEG_SOURCE_DIR}/configure" ]]; then
+  echo "FFmpeg submodule is missing; run: git submodule update --init third_parties/FFmpeg" >&2
+  exit 1
+fi
+
+readonly FFMPEG_COMMIT="$(git -C "${FFMPEG_SOURCE_DIR}" rev-parse HEAD)"
+readonly FFMPEG_DESCRIBE="$(git -C "${FFMPEG_SOURCE_DIR}" describe --tags --exact-match HEAD 2>/dev/null || true)"
+readonly BUILD_FINGERPRINT="ffmpeg-${FFMPEG_COMMIT}-lame-${LAME_VERSION}-${LAME_SHA256}-recipe-3"
+
+if [[ "${FFMPEG_DESCRIBE}" != "${FFMPEG_RELEASE}" ]]; then
+  echo "Expected FFmpeg ${FFMPEG_RELEASE}, found ${FFMPEG_DESCRIBE:-an untagged commit}." >&2
+  exit 1
+fi
+if [[ -n "$(git -C "${FFMPEG_SOURCE_DIR}" status --porcelain)" ]]; then
+  echo "FFmpeg submodule must be clean before building dependencies." >&2
+  exit 1
+fi
+dependencies_are_current() {
+  [[ -f "${PREFIX}/.build-fingerprint" ]] || return 1
+  [[ "$(<"${PREFIX}/.build-fingerprint")" == "${BUILD_FINGERPRINT}" ]] || return 1
+  for library in \
+    libavcodec.dylib \
+    libavfilter.dylib \
+    libavformat.dylib \
+    libavutil.dylib \
+    libmp3lame.dylib \
+    libswresample.dylib \
+    libswscale.dylib; do
+    [[ -f "${PREFIX}/frameworks/${library}" ]] || return 1
+  done
+}
+
+if dependencies_are_current; then
+  echo "Using media dependencies built from FFmpeg ${FFMPEG_RELEASE} in ${PREFIX}"
+  exit 0
+fi
 
 MEDIAFORGE_BUILD_JOBS="$(sysctl -n hw.logicalcpu 2>/dev/null || true)"
 if [[ ! "${MEDIAFORGE_BUILD_JOBS}" =~ ^[1-9][0-9]*$ ]]; then
@@ -53,12 +83,7 @@ download_and_verify() {
   printf '%s  %s\n' "${checksum}" "${archive}" | shasum -a 256 -c -
 }
 
-readonly FFMPEG_ARCHIVE="${CACHE_DIR}/ffmpeg-${FFMPEG_VERSION}.tar.xz"
 readonly LAME_ARCHIVE="${CACHE_DIR}/lame-${LAME_VERSION}.tar.gz"
-download_and_verify \
-  "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" \
-  "${FFMPEG_ARCHIVE}" \
-  "${FFMPEG_SHA256}"
 download_and_verify \
   "https://downloads.sourceforge.net/project/lame/lame/${LAME_VERSION}/lame-${LAME_VERSION}.tar.gz" \
   "${LAME_ARCHIVE}" \
@@ -67,7 +92,8 @@ download_and_verify \
 rm -rf "${PREFIX}"
 mkdir -p "${PREFIX}"
 tar -xf "${LAME_ARCHIVE}" -C "${WORK_DIR}"
-tar -xf "${FFMPEG_ARCHIVE}" -C "${WORK_DIR}"
+
+export MACOSX_DEPLOYMENT_TARGET=12.0
 
 pushd "${WORK_DIR}/lame-${LAME_VERSION}" >/dev/null
 # LAME 3.100 makes this legacy entry point private while its Darwin export list
@@ -85,8 +111,10 @@ make -j"${MEDIAFORGE_BUILD_JOBS}"
 make install
 popd >/dev/null
 
-pushd "${WORK_DIR}/ffmpeg-${FFMPEG_VERSION}" >/dev/null
-PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig" ./configure \
+readonly FFMPEG_BUILD_DIR="${WORK_DIR}/ffmpeg-build"
+mkdir -p "${FFMPEG_BUILD_DIR}"
+pushd "${FFMPEG_BUILD_DIR}" >/dev/null
+PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig" "${FFMPEG_SOURCE_DIR}/configure" \
   --prefix="${PREFIX}" \
   --arch=arm64 \
   --target-os=darwin \
@@ -110,25 +138,24 @@ make install
 popd >/dev/null
 
 mkdir -p "${PREFIX}/share/licenses/ffmpeg" "${PREFIX}/share/licenses/lame"
-cp "${WORK_DIR}/ffmpeg-${FFMPEG_VERSION}/COPYING.LGPLv2.1" \
+cp "${FFMPEG_SOURCE_DIR}/COPYING.LGPLv2.1" \
   "${PREFIX}/share/licenses/ffmpeg/"
-cp "${WORK_DIR}/ffmpeg-${FFMPEG_VERSION}/COPYING.LGPLv3" \
+cp "${FFMPEG_SOURCE_DIR}/COPYING.LGPLv3" \
   "${PREFIX}/share/licenses/ffmpeg/"
 cp "${WORK_DIR}/lame-${LAME_VERSION}/COPYING" \
   "${PREFIX}/share/licenses/lame/"
 
+mkdir -p "${PREFIX}/frameworks"
 for library in "${PREFIX}"/lib/*.dylib; do
   if [[ -L "${library}" ]]; then
     continue
   fi
   case "$(basename "${library}")" in
-    libavcodec.*) bundle_name="libavcodec.62.dylib" ;;
-    libavfilter.*) bundle_name="libavfilter.11.dylib" ;;
-    libavformat.*) bundle_name="libavformat.62.dylib" ;;
-    libavutil.*) bundle_name="libavutil.60.dylib" ;;
-    libmp3lame.*) bundle_name="libmp3lame.0.dylib" ;;
-    libswresample.*) bundle_name="libswresample.6.dylib" ;;
-    libswscale.*) bundle_name="libswscale.9.dylib" ;;
+    libavcodec.* | libavfilter.* | libavformat.* | libavutil.* | \
+      libmp3lame.* | libswresample.* | libswscale.*)
+      library_stem="$(basename "${library}" | cut -d. -f1)"
+      bundle_name="${library_stem}.dylib"
+      ;;
     *)
       echo "Unexpected media library: ${library}" >&2
       exit 1
@@ -137,13 +164,15 @@ for library in "${PREFIX}"/lib/*.dylib; do
   install_name_tool -id "@rpath/${bundle_name}" "${library}"
   while IFS= read -r dependency; do
     if [[ "${dependency}" == "${PREFIX}"/lib/* ]]; then
+      dependency_stem="$(basename "${dependency}" | cut -d. -f1)"
       install_name_tool -change \
         "${dependency}" \
-        "@rpath/$(basename "${dependency}")" \
+        "@rpath/${dependency_stem}.dylib" \
         "${library}"
     fi
   done < <(otool -L "${library}" | tail -n +2 | awk '{print $1}')
+  cp "${library}" "${PREFIX}/frameworks/${bundle_name}"
 done
 
 printf '%s\n' "${BUILD_FINGERPRINT}" >"${PREFIX}/.build-fingerprint"
-echo "Built reproducible media dependencies in ${PREFIX}"
+echo "Built media dependencies from FFmpeg ${FFMPEG_RELEASE} in ${PREFIX}"

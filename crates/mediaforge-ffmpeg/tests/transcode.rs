@@ -2,7 +2,7 @@
 
 use std::path::Path;
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use mediaforge_core::{
     AudioQuality, Cancellation, MediaBackend, MediaError, OutputMode, ProgressObserver,
@@ -68,7 +68,7 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
                     overwrite: false,
                 },
                 &progress,
-                &NeverCancelled,
+                Arc::new(NeverCancelled),
             )
             .unwrap_or_else(|error| panic!("{mode:?} transcode failed: {error}"));
         let output_info = backend.probe(&output).expect("output must be probed");
@@ -92,7 +92,7 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
             overwrite: false,
         },
         &RecordedProgress::default(),
-        &AlwaysCancelled,
+        Arc::new(AlwaysCancelled),
     );
     assert!(matches!(result, Err(MediaError::Cancelled)));
     assert!(!cancelled_output.exists());

@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 use ffmpeg::{
@@ -17,7 +18,7 @@ static TEMPORARY_OUTPUT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 pub(super) fn run(
     request: &TranscodeRequest,
     observer: &dyn ProgressObserver,
-    cancellation: &dyn Cancellation,
+    cancellation: Arc<dyn Cancellation>,
 ) -> Result<(), MediaError> {
     validate_paths(request)?;
     validate_encoders(request.mode)?;
@@ -38,19 +39,19 @@ fn transcode_to(
     request: &TranscodeRequest,
     temporary_path: &Path,
     observer: &dyn ProgressObserver,
-    cancellation: &dyn Cancellation,
+    cancellation: Arc<dyn Cancellation>,
 ) -> Result<(), MediaError> {
     // Contract: FFmpeg I/O interruption maps cancellation to a stable domain error.
+    let operation_cancellation = Arc::clone(&cancellation);
     let mut input =
-        format::input_with_interrupt(&request.input_path, || cancellation.is_cancelled()).map_err(
-            |error| {
-                if cancellation.is_cancelled() {
+        format::input_with_interrupt(&request.input_path, move || cancellation.is_cancelled())
+            .map_err(|error| {
+                if operation_cancellation.is_cancelled() {
                     MediaError::Cancelled
                 } else {
                     MediaError::CannotOpenInput(error.to_string())
                 }
-            },
-        )?;
+            })?;
     let video_index = input
         .streams()
         .best(media::Type::Video)
@@ -112,7 +113,7 @@ fn transcode_to(
     }
 
     for (stream, packet) in input.packets() {
-        if cancellation.is_cancelled() {
+        if operation_cancellation.is_cancelled() {
             return Err(MediaError::Cancelled);
         }
 
@@ -122,7 +123,9 @@ fn transcode_to(
         {
             video
                 .as_mut()
-                .map(|transcoder| transcoder.process_packet(&packet, &mut output, cancellation))
+                .map(|transcoder| {
+                    transcoder.process_packet(&packet, &mut output, operation_cancellation.as_ref())
+                })
                 .transpose()?
                 .flatten()
         } else if audio
@@ -131,7 +134,9 @@ fn transcode_to(
         {
             audio
                 .as_mut()
-                .map(|transcoder| transcoder.process_packet(&packet, &mut output, cancellation))
+                .map(|transcoder| {
+                    transcoder.process_packet(&packet, &mut output, operation_cancellation.as_ref())
+                })
                 .transpose()?
                 .flatten()
         } else {
@@ -146,14 +151,14 @@ fn transcode_to(
         }
     }
 
-    if cancellation.is_cancelled() {
+    if operation_cancellation.is_cancelled() {
         return Err(MediaError::Cancelled);
     }
     if let Some(transcoder) = video.as_mut() {
-        transcoder.finish(&mut output, cancellation)?;
+        transcoder.finish(&mut output, operation_cancellation.as_ref())?;
     }
     if let Some(transcoder) = audio.as_mut() {
-        transcoder.finish(&mut output, cancellation)?;
+        transcoder.finish(&mut output, operation_cancellation.as_ref())?;
     }
     output
         .write_trailer()

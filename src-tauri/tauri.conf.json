@@ -45,13 +45,13 @@
       "minimumSystemVersion": "12.0",
       "signingIdentity": null,
       "frameworks": [
-        "../vendor/ffmpeg/macos-arm64/lib/libavcodec.62.dylib",
-        "../vendor/ffmpeg/macos-arm64/lib/libavfilter.11.dylib",
-        "../vendor/ffmpeg/macos-arm64/lib/libavformat.62.dylib",
-        "../vendor/ffmpeg/macos-arm64/lib/libavutil.60.dylib",
-        "../vendor/ffmpeg/macos-arm64/lib/libswresample.6.dylib",
-        "../vendor/ffmpeg/macos-arm64/lib/libswscale.9.dylib",
-        "../vendor/ffmpeg/macos-arm64/lib/libmp3lame.0.dylib"
+        "../vendor/ffmpeg/macos-arm64/frameworks/libavcodec.dylib",
+        "../vendor/ffmpeg/macos-arm64/frameworks/libavfilter.dylib",
+        "../vendor/ffmpeg/macos-arm64/frameworks/libavformat.dylib",
+        "../vendor/ffmpeg/macos-arm64/frameworks/libavutil.dylib",
+        "../vendor/ffmpeg/macos-arm64/frameworks/libswresample.dylib",
+        "../vendor/ffmpeg/macos-arm64/frameworks/libswscale.dylib",
+        "../vendor/ffmpeg/macos-arm64/frameworks/libmp3lame.dylib"
       ]
     }
   }

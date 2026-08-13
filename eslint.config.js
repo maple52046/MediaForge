@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 
 // Constraint: ESLint's flat-config loader consumes the configuration's default export.
 export default tseslint.config(
-  { ignores: ["dist", "target", "vendor"] },
+  { ignores: ["dist", "target", "third_parties", "vendor"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

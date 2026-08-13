@@ -9,11 +9,15 @@ directly; React and TypeScript provide the Tauri desktop interface.
 Requirements:
 
 - Apple Silicon Mac running macOS 12 or later
-- Rust 1.85.1 with `rustfmt` and `clippy`
+- Rust 1.88.0 with `rustfmt` and `clippy`
 - Node.js 20.19 or later and npm
 - Clang, `make`, `pkg-config`, `curl`, `tar`, and Xcode command-line tools
-- FFmpeg 8 shared libraries discoverable through `pkg-config` for ordinary
-  development, or the reproducible dependency build below
+
+Initialize the pinned FFmpeg source after cloning:
+
+```bash
+git submodule update --init third_parties/FFmpeg
+```
 
 Install JavaScript dependencies and run the desktop application:
 
@@ -38,15 +42,20 @@ cargo test -p mediaforge-ffmpeg --test transcode -- --ignored
 
 ## Reproducible media dependencies
 
-Build the pinned LGPL shared libraries into `vendor/ffmpeg/macos-arm64`:
+Build FFmpeg 9.0.1 from the pinned submodule and install the LGPL shared
+libraries into ignored repository-local output under
+`vendor/ffmpeg/macos-arm64`:
 
 ```bash
 npm run media:deps
 ```
 
-The dependency script verifies SHA-256 checksums, disables GPL and nonfree
-components, enables VideoToolbox and native AAC, and links LAME 3.100 for MP3.
-It also rewrites bundled library identities to `@rpath`.
+The dependency script refuses a missing, dirty, or incorrectly tagged FFmpeg
+checkout. It separately verifies the LAME 3.100 source archive checksum,
+disables GPL and nonfree FFmpeg components and CLI programs, enables
+VideoToolbox and native AAC, and links LAME for MP3. Stable bundled library
+names and `@rpath` install names keep build-machine and FFmpeg ABI paths out of
+the application bundle.
 
 Create unsigned Apple Silicon app and DMG artifacts and verify their linkage:
 
