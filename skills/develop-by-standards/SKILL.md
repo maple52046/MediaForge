@@ -15,8 +15,8 @@ Treat this workflow as a required acceptance gate, not as optional guidance.
 
 1. Read `AGENTS.md` and
    `docs/standards/development-workflow.md` completely.
-2. Read every standard applicable to the planned files. For Rust or TypeScript,
-   always include `docs/standards/architecture.md` and
+2. Read every standard applicable to the planned files. For Rust, QML, or
+   CXX-Qt, always include `docs/standards/architecture.md` and
    `docs/standards/comment-content-rule.md`.
 3. Inspect the current implementation, tests, manifests, and git status before
    editing. Preserve unrelated work.

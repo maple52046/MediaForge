@@ -2,15 +2,16 @@
 
 MediaForge is a focused macOS desktop application for probing, previewing,
 trimming, and converting one media file at a time. Rust calls FFmpeg libraries
-directly; React and TypeScript provide the Tauri desktop interface.
+directly; Qt Quick/QML and Qt Multimedia provide the native desktop interface,
+with CXX-Qt as the single Rust-to-QML bridge.
 
 ## Development
 
 Requirements:
 
-- Apple Silicon Mac running macOS 12 or later
+- Apple Silicon Mac running macOS 13 or later
 - Rust 1.88.0 with `rustfmt` and `clippy`
-- Node.js 20.19 or later and npm
+- Qt 6.11.1 Desktop for macOS installed by the Qt Online Installer
 - Clang, `make`, `pkg-config`, `curl`, `tar`, and Xcode command-line tools
 
 Initialize the pinned FFmpeg source after cloning:
@@ -19,17 +20,18 @@ Initialize the pinned FFmpeg source after cloning:
 git submodule update --init third_parties/FFmpeg
 ```
 
-Install JavaScript dependencies and run the desktop application:
+Point Cargo at Qt and run the desktop application:
 
 ```bash
-npm install
-npm run tauri dev
+export QMAKE="$HOME/Qt/6.11.1/macos/bin/qmake"
+bash scripts/build-media-deps-macos.sh
+cargo run -p mediaforge-qt
 ```
 
 Run the complete source verification suite:
 
 ```bash
-npm run verify
+QMAKE="$HOME/Qt/6.11.1/macos/bin/qmake" bash scripts/verify.sh
 ```
 
 The ignored FFmpeg integration test creates synthetic fixtures with a
@@ -47,7 +49,7 @@ libraries into ignored repository-local output under
 `vendor/ffmpeg/macos-arm64`:
 
 ```bash
-npm run media:deps
+bash scripts/build-media-deps-macos.sh
 ```
 
 The dependency script refuses a missing, dirty, or incorrectly tagged FFmpeg
@@ -60,8 +62,8 @@ the application bundle.
 Create unsigned Apple Silicon app and DMG artifacts and verify their linkage:
 
 ```bash
-npm run bundle:macos
-npm run bundle:verify
+QMAKE="$HOME/Qt/6.11.1/macos/bin/qmake" bash scripts/bundle-macos.sh
+bash scripts/verify-macos-bundle.sh
 ```
 
 See [Third-party notices](THIRD_PARTY_NOTICES.md) and

@@ -2,7 +2,8 @@
 
 Guidance for AI agents (and human contributors) working in this repository.
 This project uses **Rust as its primary implementation language** and
-**TypeScript as a secondary implementation language**.
+**Qt Quick/QML as its presentation language**, with generated C++ at the
+CXX-Qt framework boundary.
 
 ## Mandatory development workflow
 
@@ -37,10 +38,6 @@ read and follow these project standards first:
   use idiomatic stable Rust, let `rustfmt` own formatting, treat Clippy warnings
   as errors, model fallibility with `Result`, document public APIs with rustdoc,
   and justify every `unsafe` block with a `// SAFETY:` comment.
-- **TypeScript style (secondary)** - [`docs/standards/typescript-style.md`](docs/standards/typescript-style.md):
-  keep strict types and named exports, prefer simple interfaces and `unknown`
-  over `any`, use TypeScript's standard module system, and enforce the codebase
-  with the compiler, ESLint, and Prettier.
 - **Comment content** - [`docs/standards/comment-content-rule.md`](docs/standards/comment-content-rule.md):
   a comment must belong to exactly one semantic category (Intent / Rationale /
   Contract / Invariant / Constraint / Risk / Side Effect / Domain Mapping /
@@ -49,6 +46,11 @@ read and follow these project standards first:
   constraint, invariant, or risk needs to be recorded so it is not lost. API
   documentation comments are always expected where the style standard requires
   them.
+- **QML and CXX-Qt style** -
+  [`docs/standards/qml-cxx-qt-style.md`](docs/standards/qml-cxx-qt-style.md):
+  keep the Qt bridge at the outer boundary, queue worker updates to the UI
+  thread, use declarative and accessible QML, and enforce QML formatting,
+  linting, tests, and packaging rules.
 
 Read each applicable standard completely before editing, and keep it open as a
 binding acceptance criterion throughout the task. Existing non-compliant code

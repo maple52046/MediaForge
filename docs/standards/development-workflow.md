@@ -25,8 +25,8 @@ intent was met.
 Before changing any artifact:
 
 1. Read `AGENTS.md` and this document completely.
-2. Read every standard applicable to the files or behavior in scope. Rust and
-   TypeScript changes also require `architecture.md` and
+2. Read every standard applicable to the files or behavior in scope. Rust,
+   QML, and CXX-Qt changes also require `architecture.md` and
    `comment-content-rule.md`.
 3. Inspect the relevant implementation, tests, manifests, and repository status
    before choosing an approach. Treat existing violations as debt, not as
@@ -66,16 +66,20 @@ While implementing:
 ## Gate 3: automated verification
 
 Run checks from the repository root. For source, test, build, dependency, or
-configuration changes, the minimum full verification is:
+configuration changes, run the repository verification entry point and
+whitespace validation:
 
 ```text
-npm run verify
+bash scripts/verify.sh
 git diff --check
 ```
 
-`npm run verify` must include the TypeScript compiler, ESLint with zero allowed
-warnings, Prettier, frontend tests and build, `cargo fmt --check`, Clippy for all
-workspace targets and features with warnings denied, and Rust tests.
+`scripts/verify.sh` must include every active language and delivery gate. The
+Qt shell requires `qmllint`, a non-mutating `qmlformat` comparison, QML tests,
+a Qt application build, Cargo format, Clippy for all workspace targets and
+features with warnings denied, Rust tests, and the macOS package verifier.
+After an obsolete shell is removed, remove its gates rather than keeping an
+unused toolchain as a verification dependency.
 
 For documentation-only or agent-instruction-only changes, verify formatting,
 all introduced local links, skill metadata when applicable, and
@@ -107,14 +111,16 @@ Inspect the final diff file by file and answer all applicable questions:
   explicit and testable?
 - Does every `unsafe` block have an immediately preceding `// SAFETY:` argument?
 
-### TypeScript
+### QML and CXX-Qt
 
-- Are exports named, types strict, boundary values narrowed from `unknown`, and
-  assertions avoided or locally justified?
-- Is every promise awaited, returned, or given an explicit rejection handler?
-- Are expected failures represented deliberately and thrown values always
-  `Error` instances?
-- Do exported APIs have useful JSDoc where the standard requires it?
+- Does presentation logic remain in QML while application and media policy stay
+  in inward Rust crates?
+- Are worker results queued to the Qt UI thread before QObject mutation or
+  signal emission?
+- Are custom controls keyboard accessible, named for assistive technology, and
+  based on integer-millisecond media state?
+- Does the bridge expose stable application values rather than framework types
+  owned by inner layers?
 
 ### Comments and tests
 

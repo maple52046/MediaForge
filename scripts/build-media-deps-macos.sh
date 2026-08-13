@@ -18,7 +18,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
-  echo "MediaForge v0.1 media dependencies require Apple Silicon macOS." >&2
+  echo "MediaForge 0.1.1 media dependencies require Apple Silicon macOS." >&2
   exit 1
 fi
 
@@ -36,7 +36,7 @@ fi
 
 readonly FFMPEG_COMMIT="$(git -C "${FFMPEG_SOURCE_DIR}" rev-parse HEAD)"
 readonly FFMPEG_DESCRIBE="$(git -C "${FFMPEG_SOURCE_DIR}" describe --tags --exact-match HEAD 2>/dev/null || true)"
-readonly BUILD_FINGERPRINT="ffmpeg-${FFMPEG_COMMIT}-lame-${LAME_VERSION}-${LAME_SHA256}-recipe-3"
+readonly BUILD_FINGERPRINT="ffmpeg-${FFMPEG_COMMIT}-lame-${LAME_VERSION}-${LAME_SHA256}-recipe-4"
 
 if [[ "${FFMPEG_DESCRIBE}" != "${FFMPEG_RELEASE}" ]]; then
   echo "Expected FFmpeg ${FFMPEG_RELEASE}, found ${FFMPEG_DESCRIBE:-an untagged commit}." >&2
@@ -50,13 +50,13 @@ dependencies_are_current() {
   [[ -f "${PREFIX}/.build-fingerprint" ]] || return 1
   [[ "$(<"${PREFIX}/.build-fingerprint")" == "${BUILD_FINGERPRINT}" ]] || return 1
   for library in \
-    libavcodec.dylib \
-    libavfilter.dylib \
-    libavformat.dylib \
-    libavutil.dylib \
-    libmp3lame.dylib \
-    libswresample.dylib \
-    libswscale.dylib; do
+    libmediaforge_avcodec.dylib \
+    libmediaforge_avfilter.dylib \
+    libmediaforge_avformat.dylib \
+    libmediaforge_avutil.dylib \
+    libmediaforge_mp3lame.dylib \
+    libmediaforge_swresample.dylib \
+    libmediaforge_swscale.dylib; do
     [[ -f "${PREFIX}/frameworks/${library}" ]] || return 1
   done
 }
@@ -93,7 +93,7 @@ rm -rf "${PREFIX}"
 mkdir -p "${PREFIX}"
 tar -xf "${LAME_ARCHIVE}" -C "${WORK_DIR}"
 
-export MACOSX_DEPLOYMENT_TARGET=12.0
+export MACOSX_DEPLOYMENT_TARGET=13.0
 
 pushd "${WORK_DIR}/lame-${LAME_VERSION}" >/dev/null
 # LAME 3.100 makes this legacy entry point private while its Darwin export list
@@ -154,24 +154,27 @@ for library in "${PREFIX}"/lib/*.dylib; do
     libavcodec.* | libavfilter.* | libavformat.* | libavutil.* | \
       libmp3lame.* | libswresample.* | libswscale.*)
       library_stem="$(basename "${library}" | cut -d. -f1)"
-      bundle_name="${library_stem}.dylib"
+      bundle_name="libmediaforge_${library_stem#lib}.dylib"
       ;;
     *)
       echo "Unexpected media library: ${library}" >&2
       exit 1
       ;;
   esac
+  # Constraint: Qt Multimedia ships its own FFmpeg ABI, so MediaForge libraries
+  # need namespaced identities to coexist in one process without dyld collisions.
   install_name_tool -id "@rpath/${bundle_name}" "${library}"
   while IFS= read -r dependency; do
     if [[ "${dependency}" == "${PREFIX}"/lib/* ]]; then
       dependency_stem="$(basename "${dependency}" | cut -d. -f1)"
       install_name_tool -change \
         "${dependency}" \
-        "@rpath/${dependency_stem}.dylib" \
+        "@rpath/libmediaforge_${dependency_stem#lib}.dylib" \
         "${library}"
     fi
   done < <(otool -L "${library}" | tail -n +2 | awk '{print $1}')
   cp "${library}" "${PREFIX}/frameworks/${bundle_name}"
+  ln -sf "$(basename "${library}")" "${PREFIX}/lib/${bundle_name}"
 done
 
 printf '%s\n' "${BUILD_FINGERPRINT}" >"${PREFIX}/.build-fingerprint"
