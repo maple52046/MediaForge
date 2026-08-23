@@ -7,7 +7,7 @@ readonly APP_DIR="${PROJECT_DIR}/target/release/bundle/macos/MediaForge.app"
 readonly EXECUTABLE="${APP_DIR}/Contents/MacOS/MediaForge"
 readonly FRAMEWORKS_DIR="${APP_DIR}/Contents/Frameworks"
 readonly RESOURCES_DIR="${APP_DIR}/Contents/Resources"
-readonly DMG_PATH="${PROJECT_DIR}/target/release/bundle/dmg/MediaForge_0.1.1_aarch64.dmg"
+readonly DMG_PATH="${PROJECT_DIR}/target/release/bundle/dmg/MediaForge_0.2.0_aarch64.dmg"
 
 if [[ ! -x "${EXECUTABLE}" ]]; then
   echo "Missing bundled executable: ${EXECUTABLE}" >&2
@@ -75,7 +75,7 @@ if ! otool -l "${EXECUTABLE}" | grep -q '@executable_path/../Frameworks'; then
   exit 1
 fi
 
-if [[ "$(plutil -extract CFBundleShortVersionString raw "${APP_DIR}/Contents/Info.plist")" != "0.1.1" ]] || \
+if [[ "$(plutil -extract CFBundleShortVersionString raw "${APP_DIR}/Contents/Info.plist")" != "0.2.0" ]] || \
   [[ "$(plutil -extract LSMinimumSystemVersion raw "${APP_DIR}/Contents/Info.plist")" != "13.0" ]]; then
   echo "Bundle version or deployment target is incorrect." >&2
   exit 1

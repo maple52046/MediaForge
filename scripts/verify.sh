@@ -15,7 +15,7 @@ export QMAKE
 readonly QT_BIN_DIR="$(dirname "${QMAKE}")"
 
 if [[ "$(${QMAKE} -query QT_VERSION)" != "6.11.1" ]]; then
-  echo "MediaForge 0.1.1 requires Qt 6.11.1." >&2
+  echo "The transitional MediaForge Qt shell requires Qt 6.11.1." >&2
   exit 1
 fi
 
@@ -28,6 +28,7 @@ export MACOSX_DEPLOYMENT_TARGET=13.0
 export PATH="${QT_BIN_DIR}:${PATH}"
 
 cd "${PROJECT_DIR}"
+"${SCRIPT_DIR}/verify-flutter.sh"
 cargo fmt --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace

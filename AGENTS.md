@@ -1,9 +1,9 @@
 # AGENTS.md
 
 Guidance for AI agents (and human contributors) working in this repository.
-This project uses **Rust as its primary implementation language** and
-**Qt Quick/QML as its presentation language**, with generated C++ at the
-CXX-Qt framework boundary.
+This project uses **Rust as its primary implementation language** and is
+migrating its presentation layer from **Qt Quick/QML** to **Flutter/Dart**.
+Both shells and their standards remain active until Flutter parity is proven.
 
 ## Mandatory development workflow
 
@@ -46,11 +46,16 @@ read and follow these project standards first:
   constraint, invariant, or risk needs to be recorded so it is not lost. API
   documentation comments are always expected where the style standard requires
   them.
+- **Dart and Flutter style** -
+  [`docs/standards/dart-flutter-style.md`](docs/standards/dart-flutter-style.md):
+  keep Flutter at the presentation edge, use strict analysis and exact package
+  versions, centralize design tokens, preserve accessibility, and enforce
+  formatting, tests, macOS builds, and generated bridge drift checks.
 - **QML and CXX-Qt style** -
   [`docs/standards/qml-cxx-qt-style.md`](docs/standards/qml-cxx-qt-style.md):
   keep the Qt bridge at the outer boundary, queue worker updates to the UI
   thread, use declarative and accessible QML, and enforce QML formatting,
-  linting, tests, and packaging rules.
+  linting, tests, and packaging rules while the transitional Qt shell remains.
 
 Read each applicable standard completely before editing, and keep it open as a
 binding acceptance criterion throughout the task. Existing non-compliant code

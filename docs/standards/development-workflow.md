@@ -75,11 +75,14 @@ git diff --check
 ```
 
 `scripts/verify.sh` must include every active language and delivery gate. The
-Qt shell requires `qmllint`, a non-mutating `qmlformat` comparison, QML tests,
-a Qt application build, Cargo format, Clippy for all workspace targets and
-features with warnings denied, Rust tests, and the macOS package verifier.
-After an obsolete shell is removed, remove its gates rather than keeping an
-unused toolchain as a verification dependency.
+Flutter shell requires non-mutating Dart formatting, strict analysis, tests,
+FRB drift validation when generated code exists, and a macOS build. The Qt
+shell requires `qmllint`, a non-mutating `qmlformat` comparison, QML tests, a Qt
+application build, and its macOS package verifier. Cargo format, Clippy for all
+workspace targets and features with warnings denied, Rust tests, and FFmpeg
+integration tests remain shared gates. After an obsolete shell is removed,
+remove its gates rather than keeping an unused toolchain as a verification
+dependency.
 
 For documentation-only or agent-instruction-only changes, verify formatting,
 all introduced local links, skill metadata when applicable, and
@@ -121,6 +124,17 @@ Inspect the final diff file by file and answer all applicable questions:
   based on integer-millisecond media state?
 - Does the bridge expose stable application values rather than framework types
   owned by inner layers?
+
+### Dart and Flutter
+
+- Does Flutter remain an outer presentation adapter without importing concrete
+  media policy into widgets or controllers?
+- Are design values centralized and supported desktop sizes free of overflow,
+  clipping, wrapping, and full-window scrolling?
+- Are custom controls keyboard accessible, semantically named, and based on
+  integer-millisecond media state?
+- Are generated bridge values mapped at the boundary without leaking Flutter
+  or FRB types into inner Rust crates?
 
 ### Comments and tests
 

@@ -487,21 +487,21 @@ dependencies = [
 
 [[package]]
 name = "mediaforge-application"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "mediaforge-core",
 ]
 
 [[package]]
 name = "mediaforge-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "thiserror 2.0.20",
 ]
 
 [[package]]
 name = "mediaforge-ffmpeg"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "ffmpeg-next",
  "mediaforge-core",
@@ -510,7 +510,7 @@ dependencies = [
 
 [[package]]
 name = "mediaforge-qt"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "cxx",
  "cxx-qt",

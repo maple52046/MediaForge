@@ -2,8 +2,8 @@
 
 MediaForge is a focused macOS desktop application for probing, previewing,
 trimming, and converting one media file at a time. Rust calls FFmpeg libraries
-directly; Qt Quick/QML and Qt Multimedia provide the native desktop interface,
-with CXX-Qt as the single Rust-to-QML bridge.
+directly. Version 0.2.0 is migrating the desktop presentation from Qt to
+Flutter through explicit visual and functional parity gates.
 
 ## Development
 
@@ -11,6 +11,8 @@ Requirements:
 
 - Apple Silicon Mac running macOS 13 or later
 - Rust 1.88.0 with `rustfmt` and `clippy`
+- Flutter 3.47.0 with Dart 3.13.0
+- `flutter_rust_bridge_codegen` 2.12.0
 - Qt 6.11.1 Desktop for macOS installed by the Qt Online Installer
 - Clang, `make`, `pkg-config`, `curl`, `tar`, and Xcode command-line tools
 
@@ -20,6 +22,18 @@ Initialize the pinned FFmpeg source after cloning:
 git submodule update --init third_parties/FFmpeg
 ```
 
+Run the UI-first Flutter prototype:
+
+```bash
+cd app
+flutter pub get
+flutter run -d macos
+```
+
+The Flutter shell uses fake data until both UI approval milestones pass. The
+Qt shell remains the functional application and a required verification gate
+during this transition.
+
 Point Cargo at Qt and run the desktop application:
 
 ```bash
@@ -28,7 +42,7 @@ bash scripts/build-media-deps-macos.sh
 cargo run -p mediaforge-qt
 ```
 
-Run the complete source verification suite:
+Run the complete dual-shell source verification suite:
 
 ```bash
 QMAKE="$HOME/Qt/6.11.1/macos/bin/qmake" bash scripts/verify.sh

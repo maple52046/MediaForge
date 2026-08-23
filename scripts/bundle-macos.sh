@@ -8,7 +8,7 @@ readonly APP_DIR="${PROJECT_DIR}/target/release/bundle/macos/MediaForge.app"
 readonly CONTENTS_DIR="${APP_DIR}/Contents"
 readonly FRAMEWORKS_DIR="${CONTENTS_DIR}/Frameworks"
 readonly RESOURCES_DIR="${CONTENTS_DIR}/Resources"
-readonly DMG_PATH="${PROJECT_DIR}/target/release/bundle/dmg/MediaForge_0.1.1_aarch64.dmg"
+readonly DMG_PATH="${PROJECT_DIR}/target/release/bundle/dmg/MediaForge_0.2.0_aarch64.dmg"
 readonly QML_SCAN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mediaforge-qml-scan.XXXXXX")"
 
 cleanup() {
@@ -28,7 +28,7 @@ readonly MACDEPLOYQT="${QT_BIN_DIR}/macdeployqt"
 readonly QT_LICENSE_DIR="$(${QMAKE} -query QT_INSTALL_PREFIX)/../..//Licenses"
 
 if [[ "$(${QMAKE} -query QT_VERSION)" != "6.11.1" ]]; then
-  echo "MediaForge 0.1.1 requires Qt 6.11.1." >&2
+  echo "The transitional MediaForge Qt shell requires Qt 6.11.1." >&2
   exit 1
 fi
 if [[ ! -x "${MACDEPLOYQT}" ]]; then
@@ -72,7 +72,7 @@ rm -rf \
   "${FRAMEWORKS_DIR}/QtSql.framework" \
   "${RESOURCES_DIR}/qml/QtQuick/LocalStorage"
 
-# Constraint: 0.1.1 is an Apple Silicon release, while the official Qt SDK
+# Constraint: 0.2.0 is an Apple Silicon release, while the official Qt SDK
 # distributes universal frameworks and plugins by default.
 while IFS= read -r binary; do
   if lipo -archs "${binary}" 2>/dev/null | grep -q 'x86_64'; then
@@ -91,7 +91,7 @@ cp "${QT_LICENSE_DIR}/COPYING.txt" "${RESOURCES_DIR}/licenses/Qt-COPYING.txt"
 mkdir -p "$(dirname "${DMG_PATH}")"
 rm -f "${DMG_PATH}"
 hdiutil create \
-  -volname "MediaForge 0.1.1" \
+  -volname "MediaForge 0.2.0" \
   -srcfolder "${APP_DIR}" \
   -ov \
   -format UDZO \
