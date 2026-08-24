@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/mediaforge_app.dart';
@@ -8,6 +9,7 @@ import 'src/prototype_state.dart';
 /// Starts the interactive MediaForge desktop prototype.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   await windowManager.ensureInitialized();
 
   const compact = bool.fromEnvironment('MEDIAFORGE_COMPACT_WINDOW');
@@ -40,12 +42,17 @@ Future<void> main() async {
   const showSettingsPopover = bool.fromEnvironment(
     'MEDIAFORGE_SHOW_SETTINGS_POPOVER',
   );
+  const previewSource = String.fromEnvironment(
+    'MEDIAFORGE_PREVIEW_PATH',
+    defaultValue: 'asset:///test/fixtures/preview-hevc.mp4',
+  );
   runApp(
     MediaForgePrototypeApp(
       state: PrototypeState.fromName(stateName),
       autoAdvanceProgress: true,
       showDropOverlay: showDropOverlay,
       showSettingsPopover: showSettingsPopover,
+      previewSource: previewSource.isEmpty ? null : previewSource,
     ),
   );
   await windowReady;

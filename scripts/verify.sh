@@ -28,6 +28,7 @@ export MACOSX_DEPLOYMENT_TARGET=13.0
 export PATH="${QT_BIN_DIR}:${PATH}"
 
 cd "${PROJECT_DIR}"
+"${SCRIPT_DIR}/generate-preview-fixtures.sh"
 "${SCRIPT_DIR}/verify-flutter.sh"
 cargo fmt --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
@@ -48,7 +49,6 @@ qmllint -W 0 -I "${qml_module_root}" \
   "${PROJECT_DIR}/qml/controls/"*.qml \
   "${PROJECT_DIR}/qml/tests/"*.qml \
   "${PROJECT_DIR}/qml/theme/"*.qml
-"${SCRIPT_DIR}/generate-preview-fixtures.sh"
 QT_QPA_PLATFORM=offscreen qmltestrunner \
   -input "${PROJECT_DIR}/qml/tests" \
   -import "${PROJECT_DIR}/qml" \

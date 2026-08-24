@@ -4,24 +4,24 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly FIXTURE_DIR="${PROJECT_DIR}/target/test-fixtures"
+readonly FLUTTER_FIXTURE_DIR="${PROJECT_DIR}/app/test/fixtures"
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
   echo "Missing developer-only ffmpeg CLI required for synthetic fixtures." >&2
   exit 1
 fi
 
-mkdir -p "${FIXTURE_DIR}"
-for codec in h264 hevc; do
-  if [[ "${codec}" == "h264" ]]; then
-    encoder=libx264
-  else
-    encoder=libx265
-  fi
+mkdir -p "${FIXTURE_DIR}" "${FLUTTER_FIXTURE_DIR}"
+
+generate_fixture() {
+  local encoder="$1"
+  local size="$2"
+  local name="$3"
   ffmpeg \
     -hide_banner \
     -loglevel error \
     -f lavfi \
-    -i "testsrc=size=320x180:rate=24" \
+    -i "testsrc=size=${size}:rate=24" \
     -f lavfi \
     -i "sine=frequency=1000:sample_rate=48000" \
     -t 2 \
@@ -31,5 +31,12 @@ for codec in h264 hevc; do
     -c:a aac \
     -shortest \
     -y \
-    "${FIXTURE_DIR}/preview-${codec}.mp4"
-done
+    "${FIXTURE_DIR}/${name}.mp4"
+  cp \
+    "${FIXTURE_DIR}/${name}.mp4" \
+    "${FLUTTER_FIXTURE_DIR}/${name}.mp4"
+}
+
+generate_fixture libx264 320x180 preview-h264
+generate_fixture libx265 320x180 preview-hevc
+generate_fixture libx265 180x320 preview-portrait-hevc

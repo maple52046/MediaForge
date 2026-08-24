@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'preview_controller.dart';
+
 /// Output choices exercised by the M2 interaction prototype.
 enum PrototypeOutputMode {
   /// MP4 with H.264 video and AAC audio.
@@ -85,28 +87,42 @@ class MediaSessionPrototypeController extends ChangeNotifier {
   }
 }
 
-/// Owns fake preview playback values without loading a media player.
-class PreviewPrototypeController extends ChangeNotifier {
+/// Owns deterministic preview values without loading a native player.
+class PreviewPrototypeController extends PreviewController {
   bool _playing = false;
   int _positionMs = 842;
   int _volumePercent = 78;
 
+  @override
+  PreviewAvailability get availability => PreviewAvailability.placeholder;
+
+  @override
+  String? get diagnostic => null;
+
+  @override
+  int get durationMs => 3856;
+
   /// Whether the fake preview is playing.
+  @override
   bool get playing => _playing;
 
   /// Current fake preview position in integer milliseconds.
+  @override
   int get positionMs => _positionMs;
 
   /// Current fake preview volume from zero through one hundred.
+  @override
   int get volumePercent => _volumePercent;
 
   /// Toggles fake preview playback.
+  @override
   void togglePlayback() {
     _playing = !_playing;
     notifyListeners();
   }
 
   /// Starts fake playback at the selected trim boundary.
+  @override
   void playSelection(int startMs) {
     _positionMs = startMs;
     _playing = true;
@@ -114,6 +130,7 @@ class PreviewPrototypeController extends ChangeNotifier {
   }
 
   /// Moves the fake preview to a timeline position.
+  @override
   void seek(int positionMs) {
     if (_positionMs == positionMs) {
       return;
@@ -123,6 +140,7 @@ class PreviewPrototypeController extends ChangeNotifier {
   }
 
   /// Updates fake preview volume while keeping it in the valid percentage range.
+  @override
   void setVolume(int volumePercent) {
     final next = volumePercent.clamp(0, 100);
     if (_volumePercent == next) {

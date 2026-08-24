@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mediaforge/src/mediaforge_app.dart';
 import 'package:mediaforge/src/mf_icon.dart';
+import 'package:mediaforge/src/preview_controller.dart';
 import 'package:mediaforge/src/prototype_state.dart';
 
 void main() {
@@ -180,6 +181,29 @@ void main() {
     expect(icon.icon, MfIconData.pause);
   });
 
+  testWidgets('preview failure degrades without hiding conversion', (
+    WidgetTester tester,
+  ) async {
+    await _setSurfaceSize(tester, const Size(1200, 780));
+    await tester.pumpWidget(
+      MediaForgePrototypeApp(
+        state: PrototypeState.loaded,
+        previewController: _UnavailablePreviewController(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('preview-fallback')), findsOneWidget);
+    expect(find.text('Preview unavailable'), findsWidgets);
+    expect(
+      find.text('Conversion remains available for this source.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('preview-center-play')), findsNothing);
+    expect(find.byKey(const Key('start-conversion')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('converting initial state exposes cancellation', (
     WidgetTester tester,
   ) async {
@@ -199,4 +223,36 @@ void main() {
 Future<void> _setSurfaceSize(WidgetTester tester, Size size) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
+}
+
+class _UnavailablePreviewController extends PreviewController {
+  @override
+  PreviewAvailability get availability => PreviewAvailability.unavailable;
+
+  @override
+  String? get diagnostic => 'Synthetic preview failure';
+
+  @override
+  int get durationMs => 3856;
+
+  @override
+  bool get playing => false;
+
+  @override
+  int get positionMs => 0;
+
+  @override
+  int get volumePercent => 78;
+
+  @override
+  void playSelection(int startMs) {}
+
+  @override
+  void seek(int positionMs) {}
+
+  @override
+  void setVolume(int volumePercent) {}
+
+  @override
+  void togglePlayback() {}
 }

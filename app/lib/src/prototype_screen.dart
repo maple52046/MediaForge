@@ -7,25 +7,27 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'mf_icon.dart';
 import 'mf_timeline.dart';
 import 'mf_tokens.dart';
+import 'preview_controller.dart';
 import 'prototype_controllers.dart';
 
-/// Interactive MediaForge workspace used for the second visual approval gate.
+/// Interactive MediaForge workspace with optional native M3 preview output.
 class MediaForgePrototypeScreen extends StatelessWidget {
-  /// Creates the M2 composition from focused fake presentation controllers.
+  /// Creates the presentation from focused controllers and native video edge.
   const MediaForgePrototypeScreen({
     required this.mediaSession,
     required this.preview,
     required this.timeline,
     required this.conversion,
     required this.settings,
+    required this.nativePreviewSurface,
     super.key,
   });
 
   /// Fake source and drop-overlay state.
   final MediaSessionPrototypeController mediaSession;
 
-  /// Fake preview playback state.
-  final PreviewPrototypeController preview;
+  /// Framework-free preview playback state.
+  final PreviewController preview;
 
   /// Fake integer-millisecond timeline state.
   final TimelinePrototypeController timeline;
@@ -35,6 +37,9 @@ class MediaForgePrototypeScreen extends StatelessWidget {
 
   /// Fake settings popover state.
   final SettingsPrototypeController settings;
+
+  /// media_kit video widget composed outside the framework-free controller.
+  final Widget? nativePreviewSurface;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +55,7 @@ class MediaForgePrototypeScreen extends StatelessWidget {
                     ? _LoadedWorkspace(
                         mediaSession: mediaSession,
                         preview: preview,
+                        nativePreviewSurface: nativePreviewSurface,
                         timeline: timeline,
                         conversion: conversion,
                       )
@@ -531,12 +537,14 @@ class _LoadedWorkspace extends StatelessWidget {
   const _LoadedWorkspace({
     required this.mediaSession,
     required this.preview,
+    required this.nativePreviewSurface,
     required this.timeline,
     required this.conversion,
   });
 
   final MediaSessionPrototypeController mediaSession;
-  final PreviewPrototypeController preview;
+  final PreviewController preview;
+  final Widget? nativePreviewSurface;
   final TimelinePrototypeController timeline;
   final ConversionPrototypeController conversion;
 
@@ -545,7 +553,11 @@ class _LoadedWorkspace extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _PreviewColumn(preview: preview, timeline: timeline),
+          child: _PreviewColumn(
+            preview: preview,
+            nativePreviewSurface: nativePreviewSurface,
+            timeline: timeline,
+          ),
         ),
         SizedBox(
           key: const Key('conversion-pane'),
@@ -562,9 +574,14 @@ class _LoadedWorkspace extends StatelessWidget {
 }
 
 class _PreviewColumn extends StatelessWidget {
-  const _PreviewColumn({required this.preview, required this.timeline});
+  const _PreviewColumn({
+    required this.preview,
+    required this.nativePreviewSurface,
+    required this.timeline,
+  });
 
-  final PreviewPrototypeController preview;
+  final PreviewController preview;
+  final Widget? nativePreviewSurface;
   final TimelinePrototypeController timeline;
 
   @override
@@ -579,7 +596,11 @@ class _PreviewColumn extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
-            child: _PreviewSurface(preview: preview, timeline: timeline),
+            child: _PreviewSurface(
+              preview: preview,
+              nativePreviewSurface: nativePreviewSurface,
+              timeline: timeline,
+            ),
           ),
           const SizedBox(height: MfSpacing.md),
           SizedBox(
@@ -594,9 +615,14 @@ class _PreviewColumn extends StatelessWidget {
 }
 
 class _PreviewSurface extends StatelessWidget {
-  const _PreviewSurface({required this.preview, required this.timeline});
+  const _PreviewSurface({
+    required this.preview,
+    required this.nativePreviewSurface,
+    required this.timeline,
+  });
 
-  final PreviewPrototypeController preview;
+  final PreviewController preview;
+  final Widget? nativePreviewSurface;
   final TimelinePrototypeController timeline;
 
   @override
@@ -612,55 +638,38 @@ class _PreviewSurface extends StatelessWidget {
         child: Stack(
           children: [
             const Positioned.fill(child: ColoredBox(color: Color(0xFF07080A))),
-            Center(
-              child: AspectRatio(
-                aspectRatio: 1242 / 2778,
+            Positioned.fill(
+              child: _PreviewBody(
+                preview: preview,
+                nativePreviewSurface: nativePreviewSurface,
+              ),
+            ),
+            if (_previewCanInteract(preview))
+              Center(
                 child: Container(
-                  margin: const EdgeInsets.symmetric(vertical: MfSpacing.md),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(MfRadius.md),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        MfPalette.elevated,
-                        MfPalette.accent,
-                        MfPalette.background,
-                      ],
-                      stops: [0, 0.58, 1],
-                    ),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0x337C5CFC), blurRadius: 32),
-                    ],
+                  width: 48,
+                  height: 48,
+                  decoration: const BoxDecoration(
+                    color: Color(0xCC111419),
+                    shape: BoxShape.circle,
                   ),
-                  child: Center(
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: const BoxDecoration(
-                        color: Color(0xCC111419),
-                        shape: BoxShape.circle,
-                      ),
-                      child: ShadButton.ghost(
-                        key: const Key('preview-center-play'),
-                        width: 48,
-                        height: 48,
-                        padding: EdgeInsets.zero,
-                        onPressed: preview.togglePlayback,
-                        child: MfIcon(
-                          preview.playing ? MfIconData.pause : MfIconData.play,
-                          size: 24,
-                        ),
-                      ),
+                  child: ShadButton.ghost(
+                    key: const Key('preview-center-play'),
+                    width: 48,
+                    height: 48,
+                    padding: EdgeInsets.zero,
+                    onPressed: preview.togglePlayback,
+                    child: MfIcon(
+                      preview.playing ? MfIconData.pause : MfIconData.play,
+                      size: 24,
                     ),
                   ),
                 ),
               ),
-            ),
-            const Positioned(
+            Positioned(
               top: MfSpacing.sm,
               left: MfSpacing.sm,
-              child: _Pill(label: 'HEVC  ·  1242 × 2778'),
+              child: _Pill(label: _previewPillLabel(preview)),
             ),
             Positioned(
               right: MfSpacing.sm,
@@ -678,7 +687,7 @@ class _PreviewSurface extends StatelessWidget {
 class _PreviewControls extends StatelessWidget {
   const _PreviewControls({required this.preview, required this.timeline});
 
-  final PreviewPrototypeController preview;
+  final PreviewController preview;
   final TimelinePrototypeController timeline;
 
   @override
@@ -698,7 +707,9 @@ class _PreviewControls extends StatelessWidget {
             width: 28,
             height: 28,
             padding: EdgeInsets.zero,
-            onPressed: preview.togglePlayback,
+            onPressed: _previewCanInteract(preview)
+                ? preview.togglePlayback
+                : null,
             child: MfIcon(
               preview.playing ? MfIconData.pause : MfIconData.play,
               size: 17,
@@ -706,13 +717,13 @@ class _PreviewControls extends StatelessWidget {
           ),
           const SizedBox(width: MfSpacing.xs),
           Text(
-            formatPrototypeTimestamp(timeline.playheadMs).substring(3),
+            formatPrototypeTimestamp(preview.positionMs).substring(3),
             key: const Key('preview-position'),
             style: const TextStyle(color: MfPalette.foreground, fontSize: 12),
           ),
           const SizedBox(width: MfSpacing.xs),
           Text(
-            '/  ${formatPrototypeTimestamp(timeline.durationMs).substring(3)}',
+            '/  ${formatPrototypeTimestamp(preview.durationMs > 0 ? preview.durationMs : timeline.durationMs).substring(3)}',
             style: const TextStyle(color: MfPalette.faint, fontSize: 12),
           ),
           const Spacer(),
@@ -720,9 +731,13 @@ class _PreviewControls extends StatelessWidget {
             key: const Key('preview-volume'),
             height: 28,
             padding: const EdgeInsets.symmetric(horizontal: MfSpacing.xs),
-            onPressed: () => preview.setVolume(
-              preview.volumePercent >= 100 ? 0 : preview.volumePercent + 11,
-            ),
+            onPressed: preview.availability == PreviewAvailability.unavailable
+                ? null
+                : () => preview.setVolume(
+                    preview.volumePercent >= 100
+                        ? 0
+                        : preview.volumePercent + 11,
+                  ),
             child: Text('Volume  ${preview.volumePercent}%'),
           ),
         ],
@@ -731,10 +746,122 @@ class _PreviewControls extends StatelessWidget {
   }
 }
 
+class _PreviewBody extends StatelessWidget {
+  const _PreviewBody({
+    required this.preview,
+    required this.nativePreviewSurface,
+  });
+
+  final PreviewController preview;
+  final Widget? nativePreviewSurface;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (preview.availability) {
+      PreviewAvailability.placeholder => const _PrototypePortraitPreview(),
+      PreviewAvailability.opening => const _PreviewMessage(
+        key: Key('preview-opening'),
+        title: 'Opening preview…',
+        detail: 'Preparing native H.264 / HEVC playback',
+      ),
+      PreviewAvailability.ready =>
+        nativePreviewSurface ??
+            const _PreviewMessage(
+              title: 'Preview output unavailable',
+              detail: 'Conversion remains available for this source.',
+            ),
+      PreviewAvailability.unavailable => const _PreviewMessage(
+        key: Key('preview-fallback'),
+        title: 'Preview unavailable',
+        detail: 'Conversion remains available for this source.',
+      ),
+    };
+  }
+}
+
+class _PrototypePortraitPreview extends StatelessWidget {
+  const _PrototypePortraitPreview();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: AspectRatio(
+        aspectRatio: 1242 / 2778,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: MfSpacing.md),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(MfRadius.md),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                MfPalette.elevated,
+                MfPalette.accent,
+                MfPalette.background,
+              ],
+              stops: [0, 0.58, 1],
+            ),
+            boxShadow: const [
+              BoxShadow(color: Color(0x337C5CFC), blurRadius: 32),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewMessage extends StatelessWidget {
+  const _PreviewMessage({required this.title, required this.detail, super.key});
+
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Semantics(
+        liveRegion: true,
+        label: '$title. $detail',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: MfPalette.foreground,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: MfSpacing.xs),
+            Text(
+              detail,
+              style: const TextStyle(color: MfPalette.muted, fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+bool _previewCanInteract(PreviewController preview) =>
+    preview.availability == PreviewAvailability.placeholder ||
+    preview.availability == PreviewAvailability.ready;
+
+String _previewPillLabel(PreviewController preview) =>
+    switch (preview.availability) {
+      PreviewAvailability.placeholder => 'HEVC  ·  1242 × 2778',
+      PreviewAvailability.opening => 'Opening native preview',
+      PreviewAvailability.ready => 'Native preview  ·  Fit',
+      PreviewAvailability.unavailable => 'Preview unavailable',
+    };
+
 class _TimelinePanel extends StatelessWidget {
   const _TimelinePanel({required this.preview, required this.timeline});
 
-  final PreviewPrototypeController preview;
+  final PreviewController preview;
   final TimelinePrototypeController timeline;
 
   @override
