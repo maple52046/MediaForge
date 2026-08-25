@@ -3,6 +3,7 @@ members = [
   "crates/mediaforge-application",
   "crates/mediaforge-core",
   "crates/mediaforge-ffmpeg",
+  "crates/mediaforge-flutter-bridge",
   "crates/mediaforge-qt",
 ]
 resolver = "2"
@@ -17,11 +18,13 @@ rust-version = "1.88"
 mediaforge-core = { path = "crates/mediaforge-core" }
 mediaforge-ffmpeg = { path = "crates/mediaforge-ffmpeg" }
 mediaforge-application = { path = "crates/mediaforge-application" }
+flutter_rust_bridge = "=2.12.0"
 thiserror = "2"
 
 [workspace.lints.rust]
 missing_docs = "deny"
 unsafe_code = "deny"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 
 [workspace.lints.clippy]
 all = "deny"

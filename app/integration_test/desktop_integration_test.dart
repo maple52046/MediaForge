@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:mediaforge/bridge/api/handshake.dart';
+import 'package:mediaforge/src/bridge_runtime.dart';
 import 'package:mediaforge/src/media_kit_preview.dart';
 import 'package:mediaforge/src/mediaforge_app.dart';
 import 'package:mediaforge/src/preview_controller.dart';
@@ -11,6 +13,70 @@ import 'package:mediaforge/src/prototype_state.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  final bridgeRuntime = BridgeRuntime();
+
+  setUpAll(bridgeRuntime.ensureInitialized);
+
+  testWidgets('macOS runner exchanges structured Rust bridge values', (
+    WidgetTester tester,
+  ) async {
+    final handshake = await negotiateBridge(
+      request: const BridgeHandshakeRequest(
+        clientName: '  MediaForge Flutter  ',
+        protocolVersion: 1,
+      ),
+    );
+    expect(handshake.clientName, 'MediaForge Flutter');
+    expect(handshake.protocolVersion, 1);
+    expect(handshake.bridgeVersion, '0.2.0');
+
+    await expectLater(
+      negotiateBridge(
+        request: const BridgeHandshakeRequest(
+          clientName: 'MediaForge Flutter',
+          protocolVersion: 2,
+        ),
+      ),
+      throwsA(
+        isA<BridgeError>()
+            .having(
+              (BridgeError error) => error.code,
+              'code',
+              BridgeErrorCode.unsupportedProtocol,
+            )
+            .having(
+              (BridgeError error) => error.diagnostic,
+              'diagnostic',
+              contains('expected 1'),
+            ),
+      ),
+    );
+  });
+
+  testWidgets('macOS runner receives an ordered terminal Rust stream', (
+    WidgetTester tester,
+  ) async {
+    final events = await bridgeEventStream(seed: 41).toList();
+    expect(events.map((BridgeEvent event) => event.kind), <BridgeEventKind>[
+      BridgeEventKind.ready,
+      BridgeEventKind.sample,
+      BridgeEventKind.sample,
+      BridgeEventKind.finished,
+    ]);
+    expect(events[0].protocolVersion, 1);
+    expect(events[1].sequence, 0);
+    expect(events[1].value, 41);
+    expect(events[2].sequence, 1);
+    expect(events[2].value, 42);
+    expect(events[3].sampleCount, 2);
+  });
+
+  testWidgets('FRB process initialization is idempotent', (
+    WidgetTester tester,
+  ) async {
+    await bridgeRuntime.ensureInitialized();
+    await bridgeRuntime.ensureInitialized();
+  });
 
   testWidgets('macOS desktop opens and closes settings', (
     WidgetTester tester,

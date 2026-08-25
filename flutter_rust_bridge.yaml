@@ -1,0 +1,11 @@
+rust_input: crate::api
+rust_root: crates/mediaforge-flutter-bridge/
+dart_output: app/lib/bridge
+dart_root: app/
+dart_entrypoint_class_name: MediaForgeRustLib
+dart_preamble: "// ignore_for_file: public_member_api_docs"
+add_mod_to_lib: false
+web: false
+type_64bit_int: true
+auto_upgrade_dependency: false
+stop_on_error: true

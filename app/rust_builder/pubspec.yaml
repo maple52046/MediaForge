@@ -1,0 +1,26 @@
+name: mediaforge_flutter_bridge
+description: Cargokit build adapter for the MediaForge Rust bridge.
+version: 0.2.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+  flutter: '>=3.35.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+      ios:
+        ffiPlugin: true
+      linux:
+        ffiPlugin: true
+      macos:
+        ffiPlugin: true
+      windows:
+        ffiPlugin: true

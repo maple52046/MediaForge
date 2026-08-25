@@ -14,7 +14,22 @@ if [[ ! -e "${CONFIG_PATH}" ]]; then
   exit 0
 fi
 
+cd "${PROJECT_DIR}"
+
+codegen_digest() {
+  find \
+    "${PROJECT_DIR}/app/lib/bridge" \
+    "${PROJECT_DIR}/crates/mediaforge-flutter-bridge" \
+    -type f -exec shasum -a 256 {} + | LC_ALL=C sort | shasum -a 256 | awk '{print $1}'
+}
+
+readonly DIGEST_BEFORE="$(codegen_digest)"
 flutter_rust_bridge_codegen generate --config-file "${CONFIG_PATH}"
+readonly DIGEST_AFTER="$(codegen_digest)"
+if [[ "${DIGEST_BEFORE}" != "${DIGEST_AFTER}" ]]; then
+  echo "flutter_rust_bridge generation changed the checked bridge tree." >&2
+  exit 1
+fi
 if ! git -C "${PROJECT_DIR}" diff --exit-code -- \
   app/lib/bridge crates/mediaforge-flutter-bridge; then
   echo "flutter_rust_bridge generated artifacts are out of date." >&2

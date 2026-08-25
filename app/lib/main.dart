@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'src/bridge_runtime.dart';
 import 'src/mediaforge_app.dart';
 import 'src/mf_tokens.dart';
 import 'src/prototype_state.dart';
@@ -9,6 +10,7 @@ import 'src/prototype_state.dart';
 /// Starts the interactive MediaForge desktop prototype.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await BridgeRuntime().ensureInitialized();
   MediaKit.ensureInitialized();
   await windowManager.ensureInitialized();
 

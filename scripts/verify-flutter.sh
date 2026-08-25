@@ -4,6 +4,7 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly FLUTTER_PROJECT_DIR="${PROJECT_DIR}/app"
+readonly CARGOKIT_BUILD_TOOL_DIR="${FLUTTER_PROJECT_DIR}/rust_builder/cargokit/build_tool"
 readonly EXPECTED_FLUTTER_VERSION="3.47.0"
 readonly EXPECTED_FRB_CODEGEN_VERSION="2.12.0"
 
@@ -39,9 +40,17 @@ fi
 
 cd "${FLUTTER_PROJECT_DIR}"
 "${FLUTTER}" pub get --enforce-lockfile
-"${DART}" format --output=none --set-exit-if-changed .
+"${DART}" format --output=none --set-exit-if-changed lib test integration_test
 "${FLUTTER}" analyze --fatal-infos --fatal-warnings
 "${FLUTTER}" test
 "${FLUTTER}" test integration_test -d macos
 "${FLUTTER}" build macos --debug
+
+cd "${CARGOKIT_BUILD_TOOL_DIR}"
+"${DART}" pub get --enforce-lockfile
+"${DART}" format --output=none --set-exit-if-changed bin lib
+"${DART}" analyze --fatal-infos --fatal-warnings
+"${DART}" test
+
+cd "${FLUTTER_PROJECT_DIR}"
 "${SCRIPT_DIR}/verify-frb-codegen.sh"
