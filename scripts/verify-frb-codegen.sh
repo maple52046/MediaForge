@@ -30,8 +30,3 @@ if [[ "${DIGEST_BEFORE}" != "${DIGEST_AFTER}" ]]; then
   echo "flutter_rust_bridge generation changed the checked bridge tree." >&2
   exit 1
 fi
-if ! git -C "${PROJECT_DIR}" diff --exit-code -- \
-  app/lib/bridge crates/mediaforge-flutter-bridge; then
-  echo "flutter_rust_bridge generated artifacts are out of date." >&2
-  exit 1
-fi

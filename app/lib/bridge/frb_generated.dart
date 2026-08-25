@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 import 'api/handshake.dart';
+import 'api/media.dart';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
@@ -75,7 +76,7 @@ class MediaForgeRustLib
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 715391131;
+  int get rustContentHash => -330361789;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -89,11 +90,20 @@ class MediaForgeRustLib
 abstract class MediaForgeRustLibApi extends BaseApi {
   Stream<BridgeEvent> crateApiHandshakeBridgeEventStream({required int seed});
 
+  Future<String> crateApiMediaDefaultOutputPath({
+    required String path,
+    required MediaOutputMode mode,
+  });
+
+  Future<BackendCapabilitiesDto> crateApiMediaInitializeBackend();
+
   Future<void> crateApiHandshakeInitializeBridge();
 
   Future<BridgeHandshake> crateApiHandshakeNegotiateBridge({
     required BridgeHandshakeRequest request,
   });
+
+  Future<MediaInfoDto> crateApiMediaProbeMedia({required String path});
 }
 
 class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
@@ -142,6 +152,68 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
       );
 
   @override
+  Future<String> crateApiMediaDefaultOutputPath({
+    required String path,
+    required MediaOutputMode mode,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          sse_encode_media_output_mode(mode, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_media_bridge_error,
+        ),
+        constMeta: kCrateApiMediaDefaultOutputPathConstMeta,
+        argValues: [path, mode],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMediaDefaultOutputPathConstMeta =>
+      const TaskConstMeta(
+        debugName: 'default_output_path',
+        argNames: ['path', 'mode'],
+      );
+
+  @override
+  Future<BackendCapabilitiesDto> crateApiMediaInitializeBackend() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_backend_capabilities_dto,
+          decodeErrorData: sse_decode_media_bridge_error,
+        ),
+        constMeta: kCrateApiMediaInitializeBackendConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMediaInitializeBackendConstMeta =>
+      const TaskConstMeta(debugName: 'initialize_backend', argNames: []);
+
+  @override
   Future<void> crateApiHandshakeInitializeBridge() {
     return handler.executeNormal(
       NormalTask(
@@ -150,7 +222,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 4,
             port: port_,
           );
         },
@@ -180,7 +252,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 5,
             port: port_,
           );
         },
@@ -197,6 +269,34 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
 
   TaskConstMeta get kCrateApiHandshakeNegotiateBridgeConstMeta =>
       const TaskConstMeta(debugName: 'negotiate_bridge', argNames: ['request']);
+
+  @override
+  Future<MediaInfoDto> crateApiMediaProbeMedia({required String path}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_media_info_dto,
+          decodeErrorData: sse_decode_media_bridge_error,
+        ),
+        constMeta: kCrateApiMediaProbeMediaConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMediaProbeMediaConstMeta =>
+      const TaskConstMeta(debugName: 'probe_media', argNames: ['path']);
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
@@ -227,11 +327,75 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   }
 
   @protected
+  AudioStreamInfoDto dco_decode_audio_stream_info_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return AudioStreamInfoDto(
+      codec: dco_decode_String(arr[0]),
+      sampleRate: dco_decode_opt_box_autoadd_u_32(arr[1]),
+      channels: dco_decode_opt_box_autoadd_u_16(arr[2]),
+      bitrate: dco_decode_opt_CastedPrimitive_u_64(arr[3]),
+    );
+  }
+
+  @protected
+  BackendCapabilitiesDto dco_decode_backend_capabilities_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return BackendCapabilitiesDto(
+      ffmpegVersion: dco_decode_String(arr[0]),
+      h264Available: dco_decode_bool(arr[1]),
+      aacAvailable: dco_decode_bool(arr[2]),
+      mp3Available: dco_decode_bool(arr[3]),
+    );
+  }
+
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
+  AudioStreamInfoDto dco_decode_box_autoadd_audio_stream_info_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_audio_stream_info_dto(raw);
+  }
+
+  @protected
   BridgeHandshakeRequest dco_decode_box_autoadd_bridge_handshake_request(
     dynamic raw,
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_bridge_handshake_request(raw);
+  }
+
+  @protected
+  double dco_decode_box_autoadd_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
+  int dco_decode_box_autoadd_u_16(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  VideoStreamInfoDto dco_decode_box_autoadd_video_stream_info_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_video_stream_info_dto(raw);
   }
 
   @protected
@@ -299,15 +463,125 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   }
 
   @protected
+  double dco_decode_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
   int dco_decode_i_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
   }
 
   @protected
+  List<MediaOutputMode> dco_decode_list_media_output_mode(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_media_output_mode).toList();
+  }
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
+  }
+
+  @protected
+  MediaBridgeError dco_decode_media_bridge_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return MediaBridgeError(
+      code: dco_decode_media_bridge_error_code(arr[0]),
+      diagnostic: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  MediaBridgeErrorCode dco_decode_media_bridge_error_code(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return MediaBridgeErrorCode.values[raw as int];
+  }
+
+  @protected
+  MediaInfoDto dco_decode_media_info_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return MediaInfoDto(
+      path: dco_decode_String(arr[0]),
+      fileName: dco_decode_String(arr[1]),
+      fileSizeBytes: dco_decode_CastedPrimitive_u_64(arr[2]),
+      durationMs: dco_decode_CastedPrimitive_u_64(arr[3]),
+      format: dco_decode_String(arr[4]),
+      video: dco_decode_opt_box_autoadd_video_stream_info_dto(arr[5]),
+      audio: dco_decode_opt_box_autoadd_audio_stream_info_dto(arr[6]),
+      availableOutputModes: dco_decode_list_media_output_mode(arr[7]),
+    );
+  }
+
+  @protected
+  MediaOutputMode dco_decode_media_output_mode(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return MediaOutputMode.values[raw as int];
+  }
+
+  @protected
+  int? dco_decode_opt_CastedPrimitive_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_CastedPrimitive_u_64(raw);
+  }
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  AudioStreamInfoDto? dco_decode_opt_box_autoadd_audio_stream_info_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_audio_stream_info_dto(raw);
+  }
+
+  @protected
+  double? dco_decode_opt_box_autoadd_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_f_64(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_16(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_u_16(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
+  }
+
+  @protected
+  VideoStreamInfoDto? dco_decode_opt_box_autoadd_video_stream_info_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_video_stream_info_dto(raw);
+  }
+
+  @protected
+  int dco_decode_u_16(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -332,6 +606,22 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   void dco_decode_unit(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return;
+  }
+
+  @protected
+  VideoStreamInfoDto dco_decode_video_stream_info_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return VideoStreamInfoDto(
+      codec: dco_decode_String(arr[0]),
+      width: dco_decode_u_32(arr[1]),
+      height: dco_decode_u_32(arr[2]),
+      frameRate: dco_decode_opt_box_autoadd_f_64(arr[3]),
+      bitrate: dco_decode_opt_CastedPrimitive_u_64(arr[4]),
+      pixelFormat: dco_decode_opt_String(arr[5]),
+    );
   }
 
   @protected
@@ -364,11 +654,85 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   }
 
   @protected
+  AudioStreamInfoDto sse_decode_audio_stream_info_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_codec = sse_decode_String(deserializer);
+    final var_sampleRate = sse_decode_opt_box_autoadd_u_32(deserializer);
+    final var_channels = sse_decode_opt_box_autoadd_u_16(deserializer);
+    final var_bitrate = sse_decode_opt_CastedPrimitive_u_64(deserializer);
+    return AudioStreamInfoDto(
+      codec: var_codec,
+      sampleRate: var_sampleRate,
+      channels: var_channels,
+      bitrate: var_bitrate,
+    );
+  }
+
+  @protected
+  BackendCapabilitiesDto sse_decode_backend_capabilities_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_ffmpegVersion = sse_decode_String(deserializer);
+    final var_h264Available = sse_decode_bool(deserializer);
+    final var_aacAvailable = sse_decode_bool(deserializer);
+    final var_mp3Available = sse_decode_bool(deserializer);
+    return BackendCapabilitiesDto(
+      ffmpegVersion: var_ffmpegVersion,
+      h264Available: var_h264Available,
+      aacAvailable: var_aacAvailable,
+      mp3Available: var_mp3Available,
+    );
+  }
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  AudioStreamInfoDto sse_decode_box_autoadd_audio_stream_info_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_audio_stream_info_dto(deserializer));
+  }
+
+  @protected
   BridgeHandshakeRequest sse_decode_box_autoadd_bridge_handshake_request(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_bridge_handshake_request(deserializer));
+  }
+
+  @protected
+  double sse_decode_box_autoadd_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_f_64(deserializer));
+  }
+
+  @protected
+  int sse_decode_box_autoadd_u_16(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_u_16(deserializer));
+  }
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_u_32(deserializer));
+  }
+
+  @protected
+  VideoStreamInfoDto sse_decode_box_autoadd_video_stream_info_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_video_stream_info_dto(deserializer));
   }
 
   @protected
@@ -437,9 +801,29 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   }
 
   @protected
+  double sse_decode_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getFloat64();
+  }
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  List<MediaOutputMode> sse_decode_list_media_output_mode(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    final len_ = sse_decode_i_32(deserializer);
+    final ans_ = <MediaOutputMode>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_media_output_mode(deserializer));
+    }
+    return ans_;
   }
 
   @protected
@@ -447,6 +831,146 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     final len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  MediaBridgeError sse_decode_media_bridge_error(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_code = sse_decode_media_bridge_error_code(deserializer);
+    final var_diagnostic = sse_decode_String(deserializer);
+    return MediaBridgeError(code: var_code, diagnostic: var_diagnostic);
+  }
+
+  @protected
+  MediaBridgeErrorCode sse_decode_media_bridge_error_code(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_i_32(deserializer);
+    return MediaBridgeErrorCode.values[inner];
+  }
+
+  @protected
+  MediaInfoDto sse_decode_media_info_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_path = sse_decode_String(deserializer);
+    final var_fileName = sse_decode_String(deserializer);
+    final var_fileSizeBytes = sse_decode_CastedPrimitive_u_64(deserializer);
+    final var_durationMs = sse_decode_CastedPrimitive_u_64(deserializer);
+    final var_format = sse_decode_String(deserializer);
+    final var_video = sse_decode_opt_box_autoadd_video_stream_info_dto(
+      deserializer,
+    );
+    final var_audio = sse_decode_opt_box_autoadd_audio_stream_info_dto(
+      deserializer,
+    );
+    final var_availableOutputModes = sse_decode_list_media_output_mode(
+      deserializer,
+    );
+    return MediaInfoDto(
+      path: var_path,
+      fileName: var_fileName,
+      fileSizeBytes: var_fileSizeBytes,
+      durationMs: var_durationMs,
+      format: var_format,
+      video: var_video,
+      audio: var_audio,
+      availableOutputModes: var_availableOutputModes,
+    );
+  }
+
+  @protected
+  MediaOutputMode sse_decode_media_output_mode(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_i_32(deserializer);
+    return MediaOutputMode.values[inner];
+  }
+
+  @protected
+  int? sse_decode_opt_CastedPrimitive_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_CastedPrimitive_u_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  AudioStreamInfoDto? sse_decode_opt_box_autoadd_audio_stream_info_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_audio_stream_info_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_f_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_u_16(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_u_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  VideoStreamInfoDto? sse_decode_opt_box_autoadd_video_stream_info_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_video_stream_info_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int sse_decode_u_16(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint16();
   }
 
   @protected
@@ -473,9 +997,24 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   }
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
+  VideoStreamInfoDto sse_decode_video_stream_info_dto(
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
+    final var_codec = sse_decode_String(deserializer);
+    final var_width = sse_decode_u_32(deserializer);
+    final var_height = sse_decode_u_32(deserializer);
+    final var_frameRate = sse_decode_opt_box_autoadd_f_64(deserializer);
+    final var_bitrate = sse_decode_opt_CastedPrimitive_u_64(deserializer);
+    final var_pixelFormat = sse_decode_opt_String(deserializer);
+    return VideoStreamInfoDto(
+      codec: var_codec,
+      width: var_width,
+      height: var_height,
+      frameRate: var_frameRate,
+      bitrate: var_bitrate,
+      pixelFormat: var_pixelFormat,
+    );
   }
 
   @protected
@@ -517,12 +1056,78 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_audio_stream_info_dto(
+    AudioStreamInfoDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.codec, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.sampleRate, serializer);
+    sse_encode_opt_box_autoadd_u_16(self.channels, serializer);
+    sse_encode_opt_CastedPrimitive_u_64(self.bitrate, serializer);
+  }
+
+  @protected
+  void sse_encode_backend_capabilities_dto(
+    BackendCapabilitiesDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.ffmpegVersion, serializer);
+    sse_encode_bool(self.h264Available, serializer);
+    sse_encode_bool(self.aacAvailable, serializer);
+    sse_encode_bool(self.mp3Available, serializer);
+  }
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_audio_stream_info_dto(
+    AudioStreamInfoDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_audio_stream_info_dto(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_bridge_handshake_request(
     BridgeHandshakeRequest self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_handshake_request(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_f_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_16(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_video_stream_info_dto(
+    VideoStreamInfoDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_video_stream_info_dto(self, serializer);
   }
 
   @protected
@@ -582,9 +1187,27 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putFloat64(self);
+  }
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putInt32(self);
+  }
+
+  @protected
+  void sse_encode_list_media_output_mode(
+    List<MediaOutputMode> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_media_output_mode(item, serializer);
+    }
   }
 
   @protected
@@ -595,6 +1218,132 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     serializer.buffer.putUint8List(self);
+  }
+
+  @protected
+  void sse_encode_media_bridge_error(
+    MediaBridgeError self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_media_bridge_error_code(self.code, serializer);
+    sse_encode_String(self.diagnostic, serializer);
+  }
+
+  @protected
+  void sse_encode_media_bridge_error_code(
+    MediaBridgeErrorCode self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_media_info_dto(MediaInfoDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.path, serializer);
+    sse_encode_String(self.fileName, serializer);
+    sse_encode_CastedPrimitive_u_64(self.fileSizeBytes, serializer);
+    sse_encode_CastedPrimitive_u_64(self.durationMs, serializer);
+    sse_encode_String(self.format, serializer);
+    sse_encode_opt_box_autoadd_video_stream_info_dto(self.video, serializer);
+    sse_encode_opt_box_autoadd_audio_stream_info_dto(self.audio, serializer);
+    sse_encode_list_media_output_mode(self.availableOutputModes, serializer);
+  }
+
+  @protected
+  void sse_encode_media_output_mode(
+    MediaOutputMode self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_opt_CastedPrimitive_u_64(
+    int? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_CastedPrimitive_u_64(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_audio_stream_info_dto(
+    AudioStreamInfoDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_audio_stream_info_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_f_64(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_u_16(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_u_32(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_video_stream_info_dto(
+    VideoStreamInfoDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_video_stream_info_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint16(self);
   }
 
   @protected
@@ -621,8 +1370,16 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   }
 
   @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
+  void sse_encode_video_stream_info_dto(
+    VideoStreamInfoDto self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
+    sse_encode_String(self.codec, serializer);
+    sse_encode_u_32(self.width, serializer);
+    sse_encode_u_32(self.height, serializer);
+    sse_encode_opt_box_autoadd_f_64(self.frameRate, serializer);
+    sse_encode_opt_CastedPrimitive_u_64(self.bitrate, serializer);
+    sse_encode_opt_String(self.pixelFormat, serializer);
   }
 }

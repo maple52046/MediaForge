@@ -36,7 +36,7 @@ impl MediaBackend for FfmpegBackend {
                 (version >> 8) & 0xff,
                 version & 0xff
             ),
-            h264_videotoolbox: ffmpeg::encoder::find_by_name("h264_videotoolbox").is_some(),
+            h264_available: ffmpeg::encoder::find_by_name("h264_videotoolbox").is_some(),
             aac: ffmpeg::encoder::find_by_name("aac").is_some(),
             libmp3lame: ffmpeg::encoder::find_by_name("libmp3lame").is_some(),
         }

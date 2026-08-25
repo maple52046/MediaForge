@@ -871,6 +871,9 @@ name = "mediaforge-flutter-bridge"
 version = "0.2.0"
 dependencies = [
  "flutter_rust_bridge",
+ "mediaforge-application",
+ "mediaforge-core",
+ "mediaforge-ffmpeg",
 ]
 
 [[package]]

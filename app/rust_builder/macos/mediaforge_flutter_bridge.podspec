@@ -6,11 +6,12 @@ Pod::Spec.new do |s|
 Builds and links the MediaForge Rust bridge through Cargokit.
                        DESC
   s.homepage         = 'https://github.com/maple52046/MediaForge'
-  s.license          = { :type => 'MIT', :file => '../../../LICENSE' }
+  s.license          = { :type => 'MIT', :file => '../LICENSE' }
   s.author           = { 'MediaForge Contributors' => 'opensource@mediaforge.app' }
 
   s.source           = { :git => 'https://github.com/maple52046/MediaForge.git', :tag => "v#{s.version}" }
   s.source_files     = 'Classes/**/*'
+  s.vendored_libraries = 'Libraries/libmediaforge_*.dylib'
   s.dependency 'FlutterMacOS'
 
   s.platform = :osx, '13.0'

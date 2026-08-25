@@ -3,6 +3,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/bridge_runtime.dart';
+import 'src/media_probe_service.dart';
 import 'src/mediaforge_app.dart';
 import 'src/mf_tokens.dart';
 import 'src/prototype_state.dart';
@@ -46,7 +47,7 @@ Future<void> main() async {
   );
   const previewSource = String.fromEnvironment(
     'MEDIAFORGE_PREVIEW_PATH',
-    defaultValue: 'asset:///test/fixtures/preview-hevc.mp4',
+    defaultValue: '',
   );
   runApp(
     MediaForgePrototypeApp(
@@ -55,6 +56,7 @@ Future<void> main() async {
       showDropOverlay: showDropOverlay,
       showSettingsPopover: showSettingsPopover,
       previewSource: previewSource.isEmpty ? null : previewSource,
+      mediaProbeService: const RustMediaProbeService(),
     ),
   );
   await windowReady;

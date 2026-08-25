@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'media_metadata.dart';
+import 'media_session_controller.dart';
 import 'mf_icon.dart';
 import 'mf_timeline.dart';
 import 'mf_tokens.dart';
@@ -24,7 +27,7 @@ class MediaForgePrototypeScreen extends StatelessWidget {
   });
 
   /// Fake source and drop-overlay state.
-  final MediaSessionPrototypeController mediaSession;
+  final MediaSessionController mediaSession;
 
   /// Framework-free preview playback state.
   final PreviewController preview;
@@ -286,7 +289,7 @@ class _PopoverChoices<T> extends StatelessWidget {
 class _EmptyWorkspace extends StatelessWidget {
   const _EmptyWorkspace({required this.mediaSession});
 
-  final MediaSessionPrototypeController mediaSession;
+  final MediaSessionController mediaSession;
 
   @override
   Widget build(BuildContext context) {
@@ -300,7 +303,7 @@ class _EmptyWorkspace extends StatelessWidget {
 class _InteractiveDropSurface extends StatefulWidget {
   const _InteractiveDropSurface({required this.mediaSession});
 
-  final MediaSessionPrototypeController mediaSession;
+  final MediaSessionController mediaSession;
 
   @override
   State<_InteractiveDropSurface> createState() =>
@@ -456,7 +459,7 @@ class _InteractiveDropSurfaceState extends State<_InteractiveDropSurface> {
 class _DropOverlay extends StatelessWidget {
   const _DropOverlay({required this.mediaSession});
 
-  final MediaSessionPrototypeController mediaSession;
+  final MediaSessionController mediaSession;
 
   @override
   Widget build(BuildContext context) {
@@ -497,10 +500,21 @@ class _DropOverlay extends StatelessWidget {
               ),
               const SizedBox(height: MfSpacing.xs),
               const Text(
-                'The M2 prototype commits a deterministic fake source.',
+                'The current source remains unchanged until metadata validation succeeds.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: MfPalette.muted, fontSize: 12),
               ),
+              if (mediaSession.failure case final failure?) ...[
+                const SizedBox(height: MfSpacing.sm),
+                Text(
+                  '${failure.code.name}: ${failure.diagnostic}',
+                  key: const Key('source-probe-error'),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: MfPalette.muted, fontSize: 11),
+                ),
+              ],
               const SizedBox(height: MfSpacing.xl),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -515,12 +529,14 @@ class _DropOverlay extends StatelessWidget {
                   ShadButton(
                     key: const Key('accept-drop'),
                     height: 36,
-                    onPressed: mediaSession.commitFakeSource,
+                    onPressed: mediaSession.probing
+                        ? null
+                        : () => unawaited(mediaSession.probeCandidateSource()),
                     leading: const MfIcon(MfIconData.upload, size: 16),
                     child: Text(
-                      mediaSession.hasMedia
-                          ? 'Replace source'
-                          : 'Use fake media',
+                      mediaSession.probing
+                          ? 'Inspecting media…'
+                          : 'Validate source',
                     ),
                   ),
                 ],
@@ -542,7 +558,7 @@ class _LoadedWorkspace extends StatelessWidget {
     required this.conversion,
   });
 
-  final MediaSessionPrototypeController mediaSession;
+  final MediaSessionController mediaSession;
   final PreviewController preview;
   final Widget? nativePreviewSurface;
   final TimelinePrototypeController timeline;
@@ -1093,7 +1109,7 @@ class _ConversionPane extends StatelessWidget {
     required this.conversion,
   });
 
-  final MediaSessionPrototypeController mediaSession;
+  final MediaSessionController mediaSession;
   final TimelinePrototypeController timeline;
   final ConversionPrototypeController conversion;
 
@@ -1121,7 +1137,7 @@ class _ConversionPane extends StatelessWidget {
 class _ReadyContent extends StatelessWidget {
   const _ReadyContent({required this.mediaSession, required this.conversion});
 
-  final MediaSessionPrototypeController mediaSession;
+  final MediaSessionController mediaSession;
   final ConversionPrototypeController conversion;
 
   @override
@@ -1138,6 +1154,7 @@ class _ReadyContent extends StatelessWidget {
         const _SectionLabel('SOURCE'),
         const SizedBox(height: MfSpacing.xs),
         _SourceSummary(
+          media: mediaSession.media!,
           replaceEnabled: true,
           onReplace: mediaSession.showDropOverlay,
         ),
@@ -1187,7 +1204,7 @@ class _ConvertingContent extends StatelessWidget {
     required this.conversion,
   });
 
-  final MediaSessionPrototypeController mediaSession;
+  final MediaSessionController mediaSession;
   final TimelinePrototypeController timeline;
   final ConversionPrototypeController conversion;
 
@@ -1205,6 +1222,7 @@ class _ConvertingContent extends StatelessWidget {
         ),
         const SizedBox(height: MfSpacing.xl),
         _SourceSummary(
+          media: mediaSession.media!,
           replaceEnabled: false,
           onReplace: mediaSession.showDropOverlay,
         ),
@@ -1322,8 +1340,13 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _SourceSummary extends StatelessWidget {
-  const _SourceSummary({required this.replaceEnabled, required this.onReplace});
+  const _SourceSummary({
+    required this.media,
+    required this.replaceEnabled,
+    required this.onReplace,
+  });
 
+  final MediaMetadata media;
   final bool replaceEnabled;
   final VoidCallback onReplace;
 
@@ -1338,12 +1361,12 @@ class _SourceSummary extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'ScreenRecording_08-13-2026.mov',
+                  media.fileName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -1352,10 +1375,10 @@ class _SourceSummary extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                SizedBox(height: MfSpacing.xxs),
+                const SizedBox(height: MfSpacing.xxs),
                 Text(
-                  'HEVC · AAC · 9.2 MB · 00:03.856',
-                  style: TextStyle(color: MfPalette.muted, fontSize: 10),
+                  _sourceDescription(media),
+                  style: const TextStyle(color: MfPalette.muted, fontSize: 10),
                 ),
               ],
             ),
@@ -1380,6 +1403,16 @@ class _SourceSummary extends StatelessWidget {
   }
 }
 
+String _sourceDescription(MediaMetadata media) {
+  final codecs = <String>[
+    if (media.video case final video?) video.codec.toUpperCase(),
+    if (media.audio case final audio?) audio.codec.toUpperCase(),
+  ];
+  final sizeMegabytes = media.fileSizeBytes / (1024 * 1024);
+  return '${codecs.join(' · ')} · ${sizeMegabytes.toStringAsFixed(1)} MB · '
+      '${formatPrototypeTimestamp(media.durationMs)}';
+}
+
 class _SegmentedModes extends StatelessWidget {
   const _SegmentedModes({required this.conversion});
 
@@ -1397,7 +1430,7 @@ class _SegmentedModes extends StatelessWidget {
       ),
       child: Row(
         children: [
-          for (final mode in PrototypeOutputMode.values)
+          for (final mode in conversion.availableModes)
             Expanded(
               child: _ModeOption(
                 key: Key('mode-${mode.name}'),
@@ -1411,10 +1444,10 @@ class _SegmentedModes extends StatelessWidget {
     );
   }
 
-  static String _modeLabel(PrototypeOutputMode mode) => switch (mode) {
-    PrototypeOutputMode.videoWithAudio => 'Video + Audio',
-    PrototypeOutputMode.videoOnly => 'Video Only',
-    PrototypeOutputMode.audioOnly => 'Audio',
+  static String _modeLabel(MediaOutputMode mode) => switch (mode) {
+    MediaOutputMode.videoWithAudio => 'Video + Audio',
+    MediaOutputMode.videoOnly => 'Video Only',
+    MediaOutputMode.audioOnly => 'Audio',
   };
 }
 
@@ -1705,9 +1738,9 @@ class _ModePresentation {
     required this.actionLabel,
   });
 
-  factory _ModePresentation.fromMode(PrototypeOutputMode mode) {
+  factory _ModePresentation.fromMode(MediaOutputMode mode) {
     return switch (mode) {
-      PrototypeOutputMode.videoWithAudio => const _ModePresentation(
+      MediaOutputMode.videoWithAudio => const _ModePresentation(
         container: 'MP4',
         video: 'H.264 · Hardware',
         audio: 'AAC · 160 kbps',
@@ -1715,7 +1748,7 @@ class _ModePresentation {
         estimatedSize: '8–10 MB',
         actionLabel: 'Convert video',
       ),
-      PrototypeOutputMode.videoOnly => const _ModePresentation(
+      MediaOutputMode.videoOnly => const _ModePresentation(
         container: 'MP4',
         video: 'H.264 · Hardware',
         audio: 'None',
@@ -1723,7 +1756,7 @@ class _ModePresentation {
         estimatedSize: '7–9 MB',
         actionLabel: 'Convert video',
       ),
-      PrototypeOutputMode.audioOnly => const _ModePresentation(
+      MediaOutputMode.audioOnly => const _ModePresentation(
         container: 'MP3',
         video: 'None',
         audio: 'MP3 · 192 kbps',

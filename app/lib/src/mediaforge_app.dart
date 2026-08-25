@@ -1,15 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'media_kit_preview.dart';
+import 'media_probe_service.dart';
+import 'media_session_controller.dart';
 import 'mf_tokens.dart';
 import 'preview_controller.dart';
 import 'prototype_controllers.dart';
 import 'prototype_screen.dart';
 import 'prototype_state.dart';
 
-/// Flutter composition root for the M3 preview prototype.
+/// Flutter composition root for native preview and backend-probed media state.
 class MediaForgePrototypeApp extends StatefulWidget {
   /// Creates controllers and an optional native preview for [previewSource].
   const MediaForgePrototypeApp({
@@ -18,6 +22,7 @@ class MediaForgePrototypeApp extends StatefulWidget {
     this.showDropOverlay = false,
     this.showSettingsPopover = false,
     this.previewSource,
+    this.mediaProbeService,
     this.previewController,
     this.previewSurface,
     super.key,
@@ -41,6 +46,9 @@ class MediaForgePrototypeApp extends StatefulWidget {
   /// File path or media_kit URI opened by the native preview adapter.
   final String? previewSource;
 
+  /// Optional native probe boundary; omission retains deterministic visual data.
+  final MediaProbeService? mediaProbeService;
+
   /// Optional preview state whose ownership transfers to this app root.
   final PreviewController? previewController;
 
@@ -52,27 +60,35 @@ class MediaForgePrototypeApp extends StatefulWidget {
 }
 
 class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
-  late final MediaSessionPrototypeController _mediaSession;
-  late final PreviewController _preview;
-  late final Widget? _nativePreviewSurface;
+  late final MediaSessionController _mediaSession;
+  late PreviewController _preview;
+  Widget? _nativePreviewSurface;
+  String? _previewSourcePath;
   late final TimelinePrototypeController _timeline;
   late final ConversionPrototypeController _conversion;
   late final SettingsPrototypeController _settings;
-  late final Listenable _prototypeState;
 
   @override
   void initState() {
     super.initState();
-    _mediaSession = MediaSessionPrototypeController(
-      initialHasMedia: widget.state != PrototypeState.empty,
-      initialDropOverlayVisible: widget.showDropOverlay,
-    );
+    final probeService = widget.mediaProbeService;
+    _mediaSession = probeService == null
+        ? MediaSessionController.prototype(
+            initialHasMedia: widget.state != PrototypeState.empty,
+            initialDropOverlayVisible: widget.showDropOverlay,
+          )
+        : MediaSessionController(
+            probeService: probeService,
+            candidatePath: widget.previewSource,
+            initialDropOverlayVisible: widget.showDropOverlay,
+          );
     final suppliedPreview = widget.previewController;
     final previewSource = widget.previewSource;
     if (suppliedPreview != null) {
       _preview = suppliedPreview;
       _nativePreviewSurface = widget.previewSurface;
-    } else if (widget.state != PrototypeState.empty &&
+    } else if (probeService == null &&
+        widget.state != PrototypeState.empty &&
         previewSource != null &&
         previewSource.isNotEmpty) {
       final nativePreview = MediaKitPreviewSession(source: previewSource);
@@ -80,6 +96,7 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
       _nativePreviewSurface = MediaKitVideoSurface(
         controller: nativePreview.video,
       );
+      _previewSourcePath = previewSource;
     } else {
       _preview = PreviewPrototypeController();
       _nativePreviewSurface = null;
@@ -92,17 +109,43 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
     _settings = SettingsPrototypeController(
       initiallyOpen: widget.showSettingsPopover,
     );
-    _prototypeState = Listenable.merge(<Listenable>[
-      _mediaSession,
-      _preview,
-      _timeline,
-      _conversion,
-      _settings,
-    ]);
+    _mediaSession.addListener(_handleMediaSessionChange);
+    final initialMedia = _mediaSession.media;
+    if (initialMedia != null) {
+      _conversion.setAvailableModes(initialMedia.availableOutputModes);
+    }
+    if (probeService != null &&
+        previewSource != null &&
+        previewSource.isNotEmpty) {
+      unawaited(_mediaSession.replaceSource(previewSource));
+    }
+  }
+
+  void _handleMediaSessionChange() {
+    final media = _mediaSession.media;
+    if (media == null) {
+      return;
+    }
+    _conversion.setAvailableModes(media.availableOutputModes);
+    if (widget.mediaProbeService == null || media.path == _previewSourcePath) {
+      return;
+    }
+
+    final previousPreview = _preview;
+    final nativePreview = MediaKitPreviewSession(source: media.path);
+    setState(() {
+      _preview = nativePreview.preview;
+      _nativePreviewSurface = media.video == null
+          ? null
+          : MediaKitVideoSurface(controller: nativePreview.video);
+      _previewSourcePath = media.path;
+    });
+    previousPreview.dispose();
   }
 
   @override
   void dispose() {
+    _mediaSession.removeListener(_handleMediaSessionChange);
     _settings.dispose();
     _conversion.dispose();
     _timeline.dispose();
@@ -113,13 +156,20 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
 
   @override
   Widget build(BuildContext context) {
+    final presentationState = Listenable.merge(<Listenable>[
+      _mediaSession,
+      _preview,
+      _timeline,
+      _conversion,
+      _settings,
+    ]);
     return ShadApp(
       title: 'MediaForge',
       theme: MfTheme.dark,
       darkTheme: MfTheme.dark,
       themeMode: ThemeMode.dark,
       home: ListenableBuilder(
-        listenable: _prototypeState,
+        listenable: presentationState,
         builder: (BuildContext context, Widget? child) {
           return MediaForgePrototypeScreen(
             mediaSession: _mediaSession,

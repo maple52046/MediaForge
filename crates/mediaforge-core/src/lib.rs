@@ -10,8 +10,8 @@ use thiserror::Error;
 pub struct BackendCapabilities {
     /// Human-readable `FFmpeg` version.
     pub ffmpeg_version: String,
-    /// Whether H.264 `VideoToolbox` encoding is available.
-    pub h264_videotoolbox: bool,
+    /// Whether the active platform adapter can encode H.264.
+    pub h264_available: bool,
     /// Whether the native AAC encoder is available.
     pub aac: bool,
     /// Whether libmp3lame encoding is available.

@@ -12,6 +12,7 @@ import 'dart:ffi' as ffi;
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 
 import 'api/handshake.dart';
+import 'api/media.dart';
 import 'frb_generated.dart';
 
 abstract class MediaForgeRustLibApiImplPlatform
@@ -38,9 +39,33 @@ abstract class MediaForgeRustLibApiImplPlatform
   String dco_decode_String(dynamic raw);
 
   @protected
+  AudioStreamInfoDto dco_decode_audio_stream_info_dto(dynamic raw);
+
+  @protected
+  BackendCapabilitiesDto dco_decode_backend_capabilities_dto(dynamic raw);
+
+  @protected
+  bool dco_decode_bool(dynamic raw);
+
+  @protected
+  AudioStreamInfoDto dco_decode_box_autoadd_audio_stream_info_dto(dynamic raw);
+
+  @protected
   BridgeHandshakeRequest dco_decode_box_autoadd_bridge_handshake_request(
     dynamic raw,
   );
+
+  @protected
+  double dco_decode_box_autoadd_f_64(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_u_16(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  VideoStreamInfoDto dco_decode_box_autoadd_video_stream_info_dto(dynamic raw);
 
   @protected
   BridgeError dco_decode_bridge_error(dynamic raw);
@@ -61,10 +86,56 @@ abstract class MediaForgeRustLibApiImplPlatform
   BridgeHandshakeRequest dco_decode_bridge_handshake_request(dynamic raw);
 
   @protected
+  double dco_decode_f_64(dynamic raw);
+
+  @protected
   int dco_decode_i_32(dynamic raw);
 
   @protected
+  List<MediaOutputMode> dco_decode_list_media_output_mode(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  MediaBridgeError dco_decode_media_bridge_error(dynamic raw);
+
+  @protected
+  MediaBridgeErrorCode dco_decode_media_bridge_error_code(dynamic raw);
+
+  @protected
+  MediaInfoDto dco_decode_media_info_dto(dynamic raw);
+
+  @protected
+  MediaOutputMode dco_decode_media_output_mode(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_CastedPrimitive_u_64(dynamic raw);
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  AudioStreamInfoDto? dco_decode_opt_box_autoadd_audio_stream_info_dto(
+    dynamic raw,
+  );
+
+  @protected
+  double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  VideoStreamInfoDto? dco_decode_opt_box_autoadd_video_stream_info_dto(
+    dynamic raw,
+  );
+
+  @protected
+  int dco_decode_u_16(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -77,6 +148,9 @@ abstract class MediaForgeRustLibApiImplPlatform
 
   @protected
   void dco_decode_unit(dynamic raw);
+
+  @protected
+  VideoStreamInfoDto dco_decode_video_stream_info_dto(dynamic raw);
 
   @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
@@ -93,7 +167,39 @@ abstract class MediaForgeRustLibApiImplPlatform
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  AudioStreamInfoDto sse_decode_audio_stream_info_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  BackendCapabilitiesDto sse_decode_backend_capabilities_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  AudioStreamInfoDto sse_decode_box_autoadd_audio_stream_info_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   BridgeHandshakeRequest sse_decode_box_autoadd_bridge_handshake_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  double sse_decode_box_autoadd_f_64(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  VideoStreamInfoDto sse_decode_box_autoadd_video_stream_info_dto(
     SseDeserializer deserializer,
   );
 
@@ -118,10 +224,60 @@ abstract class MediaForgeRustLibApiImplPlatform
   );
 
   @protected
+  double sse_decode_f_64(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
+  List<MediaOutputMode> sse_decode_list_media_output_mode(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  MediaBridgeError sse_decode_media_bridge_error(SseDeserializer deserializer);
+
+  @protected
+  MediaBridgeErrorCode sse_decode_media_bridge_error_code(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  MediaInfoDto sse_decode_media_info_dto(SseDeserializer deserializer);
+
+  @protected
+  MediaOutputMode sse_decode_media_output_mode(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_CastedPrimitive_u_64(SseDeserializer deserializer);
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  AudioStreamInfoDto? sse_decode_opt_box_autoadd_audio_stream_info_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  VideoStreamInfoDto? sse_decode_opt_box_autoadd_video_stream_info_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -136,7 +292,9 @@ abstract class MediaForgeRustLibApiImplPlatform
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
+  VideoStreamInfoDto sse_decode_video_stream_info_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   void sse_encode_AnyhowException(
@@ -157,8 +315,44 @@ abstract class MediaForgeRustLibApiImplPlatform
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_audio_stream_info_dto(
+    AudioStreamInfoDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_backend_capabilities_dto(
+    BackendCapabilitiesDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_audio_stream_info_dto(
+    AudioStreamInfoDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_bridge_handshake_request(
     BridgeHandshakeRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_video_stream_info_dto(
+    VideoStreamInfoDto self,
     SseSerializer serializer,
   );
 
@@ -193,13 +387,73 @@ abstract class MediaForgeRustLibApiImplPlatform
   );
 
   @protected
+  void sse_encode_f_64(double self, SseSerializer serializer);
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_media_output_mode(
+    List<MediaOutputMode> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_media_bridge_error(
+    MediaBridgeError self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_media_bridge_error_code(
+    MediaBridgeErrorCode self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_media_info_dto(MediaInfoDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_media_output_mode(
+    MediaOutputMode self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_CastedPrimitive_u_64(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_audio_stream_info_dto(
+    AudioStreamInfoDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_video_stream_info_dto(
+    VideoStreamInfoDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);
@@ -214,7 +468,10 @@ abstract class MediaForgeRustLibApiImplPlatform
   void sse_encode_unit(void self, SseSerializer serializer);
 
   @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
+  void sse_encode_video_stream_info_dto(
+    VideoStreamInfoDto self,
+    SseSerializer serializer,
+  );
 }
 
 // Section: wire_class

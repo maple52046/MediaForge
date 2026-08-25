@@ -1,11 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:mediaforge/bridge/api/handshake.dart';
+import 'package:mediaforge/bridge/api/media.dart' as bridge;
 import 'package:mediaforge/src/bridge_runtime.dart';
 import 'package:mediaforge/src/media_kit_preview.dart';
+import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/mediaforge_app.dart';
 import 'package:mediaforge/src/preview_controller.dart';
 import 'package:mediaforge/src/prototype_state.dart';
@@ -76,6 +80,82 @@ void main() {
   ) async {
     await bridgeRuntime.ensureInitialized();
     await bridgeRuntime.ensureInitialized();
+  });
+
+  testWidgets('macOS runner probes media through repository FFmpeg libraries', (
+    WidgetTester tester,
+  ) async {
+    final fixture = _bundledProbeFixture();
+    expect(fixture.existsSync(), isTrue);
+
+    final capabilities = await bridge.initializeBackend();
+    expect(capabilities.ffmpegVersion, isNotEmpty);
+    expect(capabilities.h264Available, isTrue);
+    expect(capabilities.aacAvailable, isTrue);
+    expect(capabilities.mp3Available, isTrue);
+
+    final bridge.MediaInfoDto media;
+    try {
+      media = await bridge.probeMedia(path: fixture.path);
+    } on bridge.MediaBridgeError catch (error) {
+      fail('${error.code.name}: ${error.diagnostic}');
+    }
+    expect(media.path, fixture.resolveSymbolicLinksSync());
+    expect(media.fileName, 'preview-hevc.mp4');
+    expect(media.durationMs, greaterThan(0));
+    expect(media.video?.codec, 'hevc');
+    expect(media.audio?.codec, 'aac');
+    expect(media.availableOutputModes, <bridge.MediaOutputMode>[
+      bridge.MediaOutputMode.videoWithAudio,
+      bridge.MediaOutputMode.videoOnly,
+      bridge.MediaOutputMode.audioOnly,
+    ]);
+    expect(
+      await bridge.defaultOutputPath(
+        path: media.path,
+        mode: bridge.MediaOutputMode.audioOnly,
+      ),
+      endsWith('preview-hevc.mp3'),
+    );
+
+    await expectLater(
+      bridge.probeMedia(path: '${fixture.path}.missing'),
+      throwsA(
+        isA<bridge.MediaBridgeError>().having(
+          (bridge.MediaBridgeError error) => error.code,
+          'code',
+          bridge.MediaBridgeErrorCode.cannotOpenInput,
+        ),
+      ),
+    );
+  });
+
+  testWidgets('successful Rust probe composes committed native preview', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 780);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final fixture = _bundledProbeFixture();
+
+    await tester.pumpWidget(
+      MediaForgePrototypeApp(
+        state: PrototypeState.empty,
+        previewSource: fixture.path,
+        mediaProbeService: const RustMediaProbeService(),
+      ),
+    );
+    await _waitForNativeState(
+      tester,
+      () =>
+          find.byKey(const Key('conversion-pane')).evaluate().isNotEmpty &&
+          find.byKey(const Key('native-preview-video')).evaluate().isNotEmpty,
+    );
+
+    expect(find.text('preview-hevc.mp4'), findsOneWidget);
+    expect(find.byKey(const Key('preview-fallback')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('macOS desktop opens and closes settings', (
@@ -228,6 +308,14 @@ void main() {
       await _waitForNativeState(tester, () => !session.preview.playing);
     });
   }
+}
+
+File _bundledProbeFixture() {
+  final contentsDirectory = File(Platform.resolvedExecutable).parent.parent;
+  return File(
+    '${contentsDirectory.path}/Frameworks/App.framework/Versions/A/Resources/'
+    'flutter_assets/test/fixtures/preview-hevc.mp4',
+  );
 }
 
 Future<void> _mountLoadedPrototype(WidgetTester tester) async {

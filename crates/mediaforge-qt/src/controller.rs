@@ -234,7 +234,7 @@ impl Default for MediaForgeControllerRust {
             audio_channels: 0,
             available_modes: QStringList::default(),
             ffmpeg_version: QString::from(capabilities.ffmpeg_version.as_str()),
-            h264_available: capabilities.h264_videotoolbox,
+            h264_available: capabilities.h264_available,
             aac_available: capabilities.aac,
             mp3_available: capabilities.libmp3lame,
             progress: 0.0,
@@ -638,7 +638,7 @@ fn emit_close_if_pending(mut controller: Pin<&mut qobject::MediaForgeController>
 fn empty_capabilities() -> BackendCapabilities {
     BackendCapabilities {
         ffmpeg_version: "unavailable".to_owned(),
-        h264_videotoolbox: false,
+        h264_available: false,
         aac: false,
         libmp3lame: false,
     }

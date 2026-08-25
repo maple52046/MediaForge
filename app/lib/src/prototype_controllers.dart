@@ -2,19 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'media_metadata.dart';
 import 'preview_controller.dart';
-
-/// Output choices exercised by the M2 interaction prototype.
-enum PrototypeOutputMode {
-  /// MP4 with H.264 video and AAC audio.
-  videoWithAudio,
-
-  /// MP4 with H.264 video and no audio stream.
-  videoOnly,
-
-  /// MP3 audio extracted from the source.
-  audioOnly,
-}
 
 /// Theme choices displayed by the fake settings popover.
 enum PrototypeThemePreference {
@@ -38,53 +27,6 @@ enum PrototypeLanguagePreference {
 
   /// Use English.
   english,
-}
-
-/// Owns fake source and drop-overlay state without performing file I/O.
-class MediaSessionPrototypeController extends ChangeNotifier {
-  /// Creates the media-session state used by the M2 prototype.
-  MediaSessionPrototypeController({
-    required bool initialHasMedia,
-    bool initialDropOverlayVisible = false,
-  }) : _hasMedia = initialHasMedia,
-       _dropOverlayVisible = initialDropOverlayVisible;
-
-  bool _hasMedia;
-  bool _dropOverlayVisible;
-
-  /// Whether the fake source metadata is committed to the session.
-  bool get hasMedia => _hasMedia;
-
-  /// Whether the full-window replacement overlay is visible.
-  bool get dropOverlayVisible => _dropOverlayVisible;
-
-  /// Shows the fake full-window drop target.
-  void showDropOverlay() {
-    if (_dropOverlayVisible) {
-      return;
-    }
-    _dropOverlayVisible = true;
-    notifyListeners();
-  }
-
-  /// Dismisses the fake drop target without replacing the source.
-  void hideDropOverlay() {
-    if (!_dropOverlayVisible) {
-      return;
-    }
-    _dropOverlayVisible = false;
-    notifyListeners();
-  }
-
-  /// Commits the deterministic fake source and closes the drop target.
-  void commitFakeSource() {
-    final changed = !_hasMedia || _dropOverlayVisible;
-    _hasMedia = true;
-    _dropOverlayVisible = false;
-    if (changed) {
-      notifyListeners();
-    }
-  }
 }
 
 /// Owns deterministic preview values without loading a native player.
@@ -261,12 +203,16 @@ class ConversionPrototypeController extends ChangeNotifier {
   /// Whether the prototype advances progress on a presentation-only timer.
   final bool autoAdvanceProgress;
   Timer? _progressTimer;
-  PrototypeOutputMode _mode = PrototypeOutputMode.videoWithAudio;
+  List<MediaOutputMode> _availableModes = MediaOutputMode.values;
+  MediaOutputMode _mode = MediaOutputMode.videoWithAudio;
   bool _converting;
   double _progress;
 
   /// Selected fake output mode.
-  PrototypeOutputMode get mode => _mode;
+  MediaOutputMode get mode => _mode;
+
+  /// Rust-authoritative recipes available for the committed source.
+  List<MediaOutputMode> get availableModes => _availableModes;
 
   /// Whether fake conversion is active.
   bool get converting => _converting;
@@ -275,11 +221,26 @@ class ConversionPrototypeController extends ChangeNotifier {
   double get progress => _progress;
 
   /// Selects an output mode while conversion is idle.
-  void selectMode(PrototypeOutputMode mode) {
-    if (_converting || _mode == mode) {
+  void selectMode(MediaOutputMode mode) {
+    if (_converting || _mode == mode || !_availableModes.contains(mode)) {
       return;
     }
     _mode = mode;
+    notifyListeners();
+  }
+
+  /// Replaces mode availability with the ordered recipes from Rust metadata.
+  void setAvailableModes(List<MediaOutputMode> modes) {
+    if (modes.isEmpty) {
+      throw ArgumentError.value(modes, 'modes', 'must not be empty');
+    }
+    final next = List<MediaOutputMode>.unmodifiable(modes);
+    final nextMode = next.contains(_mode) ? _mode : next.first;
+    if (listEquals(_availableModes, next) && _mode == nextMode) {
+      return;
+    }
+    _availableModes = next;
+    _mode = nextMode;
     notifyListeners();
   }
 

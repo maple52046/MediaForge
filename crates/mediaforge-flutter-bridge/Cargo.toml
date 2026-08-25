@@ -10,6 +10,9 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 flutter_rust_bridge.workspace = true
+mediaforge-application.workspace = true
+mediaforge-core.workspace = true
+mediaforge-ffmpeg.workspace = true
 
 [lints]
 workspace = true

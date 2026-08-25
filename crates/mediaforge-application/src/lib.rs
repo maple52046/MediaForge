@@ -1,14 +1,15 @@
 //! Framework-independent use cases for the `MediaForge` desktop application.
 
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use mediaforge_core::{
-    Cancellation, MediaBackend, MediaError, ProgressObserver, ProgressUpdate, TranscodeRequest,
+    BackendCapabilities, Cancellation, MediaBackend, MediaError, MediaInfo, ProgressObserver,
+    ProgressUpdate, TranscodeRequest,
 };
 
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
@@ -167,6 +168,35 @@ impl From<MediaError> for ApplicationError {
             code,
             message: error.to_string(),
         }
+    }
+}
+
+/// Framework-independent access to backend discovery and source metadata.
+pub struct MediaFacade {
+    backend: Arc<dyn MediaBackend>,
+}
+
+impl MediaFacade {
+    /// Creates a facade around the backend selected by an outer composition root.
+    #[must_use]
+    pub fn new(backend: Arc<dyn MediaBackend>) -> Self {
+        Self { backend }
+    }
+
+    /// Reports codec capabilities without exposing adapter-specific values.
+    #[must_use]
+    pub fn capabilities(&self) -> BackendCapabilities {
+        self.backend.capabilities()
+    }
+
+    /// Probes one caller-validated local path through the configured backend.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stable [`ApplicationError`] while retaining the backend's
+    /// diagnostic cause.
+    pub fn probe(&self, path: &Path) -> Result<MediaInfo, ApplicationError> {
+        self.backend.probe(path).map_err(ApplicationError::from)
     }
 }
 
@@ -497,16 +527,22 @@ mod tests {
         fn capabilities(&self) -> BackendCapabilities {
             BackendCapabilities {
                 ffmpeg_version: "fake".to_owned(),
-                h264_videotoolbox: true,
+                h264_available: true,
                 aac: true,
                 libmp3lame: true,
             }
         }
 
-        fn probe(&self, _path: &Path) -> Result<MediaInfo, MediaError> {
-            Err(MediaError::Unexpected(
-                "probe is not used by this fake".to_owned(),
-            ))
+        fn probe(&self, path: &Path) -> Result<MediaInfo, MediaError> {
+            Ok(MediaInfo {
+                path: path.to_path_buf(),
+                file_name: "input.mov".to_owned(),
+                file_size_bytes: 1_024,
+                duration_ms: 1_000,
+                format: "mov".to_owned(),
+                video: None,
+                audio: None,
+            })
         }
 
         fn transcode(
@@ -544,6 +580,18 @@ mod tests {
             audio_quality: AudioQuality::Medium,
             overwrite: false,
         }
+    }
+
+    #[test]
+    fn media_facade_preserves_backend_values() {
+        let facade = MediaFacade::new(Arc::new(FakeBackend::succeeds()));
+
+        assert!(facade.capabilities().h264_available);
+        let media = facade
+            .probe(Path::new("/canonical/input.mov"))
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(media.path, PathBuf::from("/canonical/input.mov"));
+        assert_eq!(media.file_size_bytes, 1_024);
     }
 
     #[test]
