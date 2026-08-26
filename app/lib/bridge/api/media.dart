@@ -9,8 +9,10 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 import '../frb_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `canonicalize_path`, `media_facade`, `path_to_string`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`
+// These functions are ignored because they are not marked as `pub`: `build_transcode_request`, `canonicalize_output_path`, `canonicalize_path`, `is_terminal`, `job_event_id`, `media_runtime`, `path_to_string`, `subscribe`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `BridgeJobEventSink`, `EventDelivery`, `MediaRuntime`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `emit`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`, `try_from`
+// These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`, `default`
 
 /// Initializes the process-wide `FFmpeg` adapter and reports its capabilities.
 ///
@@ -43,6 +45,25 @@ Future<String> defaultOutputPath({
   path: path,
   mode: mode,
 );
+
+/// Validates and starts one primary Video + Audio conversion.
+///
+/// # Errors
+///
+/// Returns a stable application failure for stale paths, unsupported mode,
+/// invalid trim, unavailable encoders, or an already active job.
+Future<JobSnapshotDto> startTranscode({
+  required StartTranscodeRequestDto request,
+}) => MediaForgeRustLib.instance.api.crateApiMediaStartTranscode(
+  request: request,
+);
+
+/// Registers the process's current Flutter subscriber for application events.
+///
+/// The stream remains open for the process lifetime. Re-registering replaces a
+/// stale presentation subscriber and replays any retained terminal event.
+Stream<JobEventDto> jobEvents() =>
+    MediaForgeRustLib.instance.api.crateApiMediaJobEvents();
 
 /// Primary audio metadata safe to expose through FRB.
 class AudioStreamInfoDto {
@@ -120,6 +141,165 @@ class BackendCapabilitiesDto {
           h264Available == other.h264Available &&
           aacAvailable == other.aacAvailable &&
           mp3Available == other.mp3Available;
+}
+
+/// Tagged application event delivered to the Flutter conversion controller.
+class JobEventDto {
+  const JobEventDto({
+    required this.kind,
+    required this.jobId,
+    this.percent,
+    this.processedMs,
+    this.totalMs,
+    this.framesPerSecond,
+    this.speed,
+    this.outputPath,
+    this.error,
+  });
+
+  /// Discriminator controlling which optional payload fields are meaningful.
+  final JobEventKindDto kind;
+
+  /// Job that produced the event.
+  final int jobId;
+
+  /// Completion percentage for [`JobEventKindDto::Progress`].
+  final double? percent;
+
+  /// Processed time for [`JobEventKindDto::Progress`].
+  final int? processedMs;
+
+  /// Selected duration for [`JobEventKindDto::Progress`].
+  final int? totalMs;
+
+  /// Current frame rate for [`JobEventKindDto::Progress`] when available.
+  final double? framesPerSecond;
+
+  /// Current realtime multiplier for [`JobEventKindDto::Progress`] when available.
+  final double? speed;
+
+  /// Final destination for [`JobEventKindDto::Completed`].
+  final String? outputPath;
+
+  /// Structured failure for [`JobEventKindDto::Failed`].
+  final MediaBridgeError? error;
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      jobId.hashCode ^
+      percent.hashCode ^
+      processedMs.hashCode ^
+      totalMs.hashCode ^
+      framesPerSecond.hashCode ^
+      speed.hashCode ^
+      outputPath.hashCode ^
+      error.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is JobEventDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          jobId == other.jobId &&
+          percent == other.percent &&
+          processedMs == other.processedMs &&
+          totalMs == other.totalMs &&
+          framesPerSecond == other.framesPerSecond &&
+          speed == other.speed &&
+          outputPath == other.outputPath &&
+          error == other.error;
+}
+
+/// Discriminator controlling the meaningful fields in [`JobEventDto`].
+enum JobEventKindDto {
+  /// The application reserved the exclusive worker slot.
+  preparing,
+
+  /// The backend emitted a throttled monotonic progress sample.
+  progress,
+
+  /// The final destination was committed successfully.
+  completed,
+
+  /// Cooperative cancellation and cleanup completed.
+  cancelled,
+
+  /// A non-cancellation failure and cleanup completed.
+  failed,
+}
+
+/// Plain snapshot returned immediately after the application reserves a job.
+class JobSnapshotDto {
+  const JobSnapshotDto({
+    required this.jobId,
+    required this.state,
+    required this.inputPath,
+    required this.outputPath,
+  });
+
+  /// Process-local job identifier used to correlate events.
+  final int jobId;
+
+  /// Current lifecycle state.
+  final JobStateDto state;
+
+  /// Canonical source path reserved by the job.
+  final String inputPath;
+
+  /// Canonical destination path reserved by the job.
+  final String outputPath;
+
+  @override
+  int get hashCode =>
+      jobId.hashCode ^
+      state.hashCode ^
+      inputPath.hashCode ^
+      outputPath.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is JobSnapshotDto &&
+          runtimeType == other.runtimeType &&
+          jobId == other.jobId &&
+          state == other.state &&
+          inputPath == other.inputPath &&
+          outputPath == other.outputPath;
+}
+
+/// Lifecycle state returned with a conversion snapshot.
+enum JobStateDto {
+  /// No job has started.
+  idle,
+
+  /// A worker owns the job and is opening media resources.
+  preparing,
+
+  /// The backend is producing output.
+  running,
+
+  /// The destination was committed successfully.
+  completed,
+
+  /// Cooperative cancellation ended the operation.
+  cancelled,
+
+  /// A non-cancellation error ended the operation.
+  failed,
+}
+
+/// MP3 quality values retained in the stable conversion request contract.
+enum MediaAudioQuality {
+  /// 256 kbps MP3.
+  high,
+
+  /// 192 kbps MP3.
+  medium,
+
+  /// 128 kbps MP3.
+  low,
 }
 
 /// Structured media failure crossing the generated FRB boundary.
@@ -256,6 +436,63 @@ enum MediaOutputMode {
 
   /// MP3 audio without video.
   audioOnly,
+}
+
+/// Plain conversion request accepted from Flutter presentation state.
+class StartTranscodeRequestDto {
+  const StartTranscodeRequestDto({
+    required this.inputPath,
+    required this.outputPath,
+    required this.mode,
+    required this.audioQuality,
+    required this.startMs,
+    required this.endMs,
+    required this.overwrite,
+  });
+
+  /// Canonical source path previously returned by [`probe_media`].
+  final String inputPath;
+
+  /// Destination path proposed by [`default_output_path`].
+  final String outputPath;
+
+  /// Requested output recipe.
+  final MediaOutputMode mode;
+
+  /// MP3 quality retained for the future audio-only workflow.
+  final MediaAudioQuality audioQuality;
+
+  /// Inclusive trim start in integer milliseconds.
+  final int startMs;
+
+  /// Exclusive trim end in integer milliseconds.
+  final int endMs;
+
+  /// Whether an existing destination may be replaced after success.
+  final bool overwrite;
+
+  @override
+  int get hashCode =>
+      inputPath.hashCode ^
+      outputPath.hashCode ^
+      mode.hashCode ^
+      audioQuality.hashCode ^
+      startMs.hashCode ^
+      endMs.hashCode ^
+      overwrite.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StartTranscodeRequestDto &&
+          runtimeType == other.runtimeType &&
+          inputPath == other.inputPath &&
+          outputPath == other.outputPath &&
+          mode == other.mode &&
+          audioQuality == other.audioQuality &&
+          startMs == other.startMs &&
+          endMs == other.endMs &&
+          overwrite == other.overwrite;
 }
 
 /// Primary video metadata safe to expose through FRB.

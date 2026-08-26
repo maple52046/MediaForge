@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mediaforge/src/conversion_controller.dart';
 import 'package:mediaforge/src/media_metadata.dart';
 import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/media_session_controller.dart';
@@ -139,25 +140,28 @@ void main() {
     expect(preview.positionMs, 1200);
   });
 
-  test('conversion locks mode while active and supports cancellation', () {
-    final controller = ConversionPrototypeController();
-    addTearDown(controller.dispose);
+  test(
+    'conversion locks mode while active and supports cancellation',
+    () async {
+      final controller = ConversionController.prototype();
+      addTearDown(controller.dispose);
 
-    controller.selectMode(MediaOutputMode.audioOnly);
-    expect(controller.mode, MediaOutputMode.audioOnly);
-    controller.start();
-    expect(controller.converting, isTrue);
-    expect(controller.progress, 0.08);
+      controller.selectMode(MediaOutputMode.audioOnly);
+      expect(controller.mode, MediaOutputMode.audioOnly);
+      await controller.start();
+      expect(controller.converting, isTrue);
+      expect(controller.progress, 0.08);
 
-    controller.selectMode(MediaOutputMode.videoOnly);
-    expect(controller.mode, MediaOutputMode.audioOnly);
-    controller.cancel();
-    expect(controller.converting, isFalse);
-    expect(controller.progress, 0);
-  });
+      controller.selectMode(MediaOutputMode.videoOnly);
+      expect(controller.mode, MediaOutputMode.audioOnly);
+      controller.cancel();
+      expect(controller.converting, isFalse);
+      expect(controller.progress, 0);
+    },
+  );
 
   test('conversion exposes only Rust-authoritative output modes', () {
-    final controller = ConversionPrototypeController();
+    final controller = ConversionController.prototype();
     addTearDown(controller.dispose);
 
     controller.setAvailableModes(const <MediaOutputMode>[

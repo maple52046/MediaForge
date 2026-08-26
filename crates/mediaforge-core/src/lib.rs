@@ -371,7 +371,23 @@ pub fn balanced_video_bitrate(
 /// Proposes an output beside the source with the requested mode's extension.
 #[must_use]
 pub fn propose_output_path(input: &Path, mode: OutputMode) -> PathBuf {
-    input.with_extension(mode.extension())
+    let extension = mode.extension();
+    let output = input.with_extension(extension);
+    let aliases_input = input
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .is_some_and(|input_extension| input_extension.eq_ignore_ascii_case(extension));
+    if !aliases_input {
+        return output;
+    }
+    let Some(stem) = input.file_stem() else {
+        return output;
+    };
+    let mut converted_stem = stem.to_os_string();
+    converted_stem.push("-converted");
+    input
+        .with_file_name(converted_stem)
+        .with_extension(extension)
 }
 
 #[cfg(test)]
@@ -445,6 +461,10 @@ mod tests {
         assert_eq!(
             propose_output_path(Path::new("/tmp/clip.mov"), OutputMode::AudioOnly),
             PathBuf::from("/tmp/clip.mp3")
+        );
+        assert_eq!(
+            propose_output_path(Path::new("/tmp/clip.MP4"), OutputMode::VideoWithAudio),
+            PathBuf::from("/tmp/clip-converted.mp4")
         );
     }
 }

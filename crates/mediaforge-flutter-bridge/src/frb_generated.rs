@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -330361789;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1363898566;
 
 // Section: executor
 
@@ -183,6 +183,44 @@ fn wire__crate__api__handshake__initialize_bridge_impl(
         },
     )
 }
+fn wire__crate__api__media__job_events_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "job_events",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_sink = <StreamSink<
+                crate::api::media::JobEventDto,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok({
+                        crate::api::media::job_events(api_sink);
+                    })?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__handshake__negotiate_bridge_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -250,6 +288,40 @@ fn wire__crate__api__media__probe_media_impl(
         },
     )
 }
+fn wire__crate__api__media__start_transcode_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "start_transcode",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request =
+                <crate::api::media::StartTranscodeRequestDto>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::media::MediaBridgeError>((move || {
+                    let output_ok = crate::api::media::start_transcode(api_request)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -263,6 +335,16 @@ impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
 
 impl SseDecode
     for StreamSink<crate::api::handshake::BridgeEvent, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
+
+impl SseDecode
+    for StreamSink<crate::api::media::JobEventDto, flutter_rust_bridge::for_generated::SseCodec>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -414,6 +496,79 @@ impl SseDecode for i32 {
     }
 }
 
+impl SseDecode for crate::api::media::JobEventDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_kind = <crate::api::media::JobEventKindDto>::sse_decode(deserializer);
+        let mut var_jobId = <u64>::sse_decode(deserializer);
+        let mut var_percent = <Option<f64>>::sse_decode(deserializer);
+        let mut var_processedMs = <Option<u64>>::sse_decode(deserializer);
+        let mut var_totalMs = <Option<u64>>::sse_decode(deserializer);
+        let mut var_framesPerSecond = <Option<f64>>::sse_decode(deserializer);
+        let mut var_speed = <Option<f64>>::sse_decode(deserializer);
+        let mut var_outputPath = <Option<String>>::sse_decode(deserializer);
+        let mut var_error = <Option<crate::api::media::MediaBridgeError>>::sse_decode(deserializer);
+        return crate::api::media::JobEventDto {
+            kind: var_kind,
+            job_id: var_jobId,
+            percent: var_percent,
+            processed_ms: var_processedMs,
+            total_ms: var_totalMs,
+            frames_per_second: var_framesPerSecond,
+            speed: var_speed,
+            output_path: var_outputPath,
+            error: var_error,
+        };
+    }
+}
+
+impl SseDecode for crate::api::media::JobEventKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::media::JobEventKindDto::Preparing,
+            1 => crate::api::media::JobEventKindDto::Progress,
+            2 => crate::api::media::JobEventKindDto::Completed,
+            3 => crate::api::media::JobEventKindDto::Cancelled,
+            4 => crate::api::media::JobEventKindDto::Failed,
+            _ => unreachable!("Invalid variant for JobEventKindDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::media::JobSnapshotDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_jobId = <u64>::sse_decode(deserializer);
+        let mut var_state = <crate::api::media::JobStateDto>::sse_decode(deserializer);
+        let mut var_inputPath = <String>::sse_decode(deserializer);
+        let mut var_outputPath = <String>::sse_decode(deserializer);
+        return crate::api::media::JobSnapshotDto {
+            job_id: var_jobId,
+            state: var_state,
+            input_path: var_inputPath,
+            output_path: var_outputPath,
+        };
+    }
+}
+
+impl SseDecode for crate::api::media::JobStateDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::media::JobStateDto::Idle,
+            1 => crate::api::media::JobStateDto::Preparing,
+            2 => crate::api::media::JobStateDto::Running,
+            3 => crate::api::media::JobStateDto::Completed,
+            4 => crate::api::media::JobStateDto::Cancelled,
+            5 => crate::api::media::JobStateDto::Failed,
+            _ => unreachable!("Invalid variant for JobStateDto: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for Vec<crate::api::media::MediaOutputMode> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -437,6 +592,19 @@ impl SseDecode for Vec<u8> {
             ans_.push(<u8>::sse_decode(deserializer));
         }
         return ans_;
+    }
+}
+
+impl SseDecode for crate::api::media::MediaAudioQuality {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::media::MediaAudioQuality::High,
+            1 => crate::api::media::MediaAudioQuality::Medium,
+            2 => crate::api::media::MediaAudioQuality::Low,
+            _ => unreachable!("Invalid variant for MediaAudioQuality: {}", inner),
+        };
     }
 }
 
@@ -560,6 +728,19 @@ impl SseDecode for Option<f64> {
     }
 }
 
+impl SseDecode for Option<crate::api::media::MediaBridgeError> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::media::MediaBridgeError>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<u16> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -592,6 +773,28 @@ impl SseDecode for Option<crate::api::media::VideoStreamInfoDto> {
         } else {
             return None;
         }
+    }
+}
+
+impl SseDecode for crate::api::media::StartTranscodeRequestDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_inputPath = <String>::sse_decode(deserializer);
+        let mut var_outputPath = <String>::sse_decode(deserializer);
+        let mut var_mode = <crate::api::media::MediaOutputMode>::sse_decode(deserializer);
+        let mut var_audioQuality = <crate::api::media::MediaAudioQuality>::sse_decode(deserializer);
+        let mut var_startMs = <u64>::sse_decode(deserializer);
+        let mut var_endMs = <u64>::sse_decode(deserializer);
+        let mut var_overwrite = <bool>::sse_decode(deserializer);
+        return crate::api::media::StartTranscodeRequestDto {
+            input_path: var_inputPath,
+            output_path: var_outputPath,
+            mode: var_mode,
+            audio_quality: var_audioQuality,
+            start_ms: var_startMs,
+            end_ms: var_endMs,
+            overwrite: var_overwrite,
+        };
     }
 }
 
@@ -663,8 +866,10 @@ fn pde_ffi_dispatcher_primary_impl(
         2 => wire__crate__api__media__default_output_path_impl(port, ptr, rust_vec_len, data_len),
         3 => wire__crate__api__media__initialize_backend_impl(port, ptr, rust_vec_len, data_len),
         4 => wire__crate__api__handshake__initialize_bridge_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__handshake__negotiate_bridge_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__media__probe_media_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__media__job_events_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__handshake__negotiate_bridge_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__media__probe_media_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__media__start_transcode_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -862,6 +1067,128 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::handshake::BridgeHandshakeReq
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::media::JobEventDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.kind.into_into_dart().into_dart(),
+            self.job_id.into_into_dart().into_dart(),
+            self.percent.into_into_dart().into_dart(),
+            self.processed_ms.into_into_dart().into_dart(),
+            self.total_ms.into_into_dart().into_dart(),
+            self.frames_per_second.into_into_dart().into_dart(),
+            self.speed.into_into_dart().into_dart(),
+            self.output_path.into_into_dart().into_dart(),
+            self.error.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::media::JobEventDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::media::JobEventDto>
+    for crate::api::media::JobEventDto
+{
+    fn into_into_dart(self) -> crate::api::media::JobEventDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::media::JobEventKindDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Preparing => 0.into_dart(),
+            Self::Progress => 1.into_dart(),
+            Self::Completed => 2.into_dart(),
+            Self::Cancelled => 3.into_dart(),
+            Self::Failed => 4.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::media::JobEventKindDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::media::JobEventKindDto>
+    for crate::api::media::JobEventKindDto
+{
+    fn into_into_dart(self) -> crate::api::media::JobEventKindDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::media::JobSnapshotDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.job_id.into_into_dart().into_dart(),
+            self.state.into_into_dart().into_dart(),
+            self.input_path.into_into_dart().into_dart(),
+            self.output_path.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::media::JobSnapshotDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::media::JobSnapshotDto>
+    for crate::api::media::JobSnapshotDto
+{
+    fn into_into_dart(self) -> crate::api::media::JobSnapshotDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::media::JobStateDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Idle => 0.into_dart(),
+            Self::Preparing => 1.into_dart(),
+            Self::Running => 2.into_dart(),
+            Self::Completed => 3.into_dart(),
+            Self::Cancelled => 4.into_dart(),
+            Self::Failed => 5.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::media::JobStateDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::media::JobStateDto>
+    for crate::api::media::JobStateDto
+{
+    fn into_into_dart(self) -> crate::api::media::JobStateDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::media::MediaAudioQuality {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::High => 0.into_dart(),
+            Self::Medium => 1.into_dart(),
+            Self::Low => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::media::MediaAudioQuality
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::media::MediaAudioQuality>
+    for crate::api::media::MediaAudioQuality
+{
+    fn into_into_dart(self) -> crate::api::media::MediaAudioQuality {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::media::MediaBridgeError {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -963,6 +1290,32 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::media::MediaOutputMode>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::media::StartTranscodeRequestDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.input_path.into_into_dart().into_dart(),
+            self.output_path.into_into_dart().into_dart(),
+            self.mode.into_into_dart().into_dart(),
+            self.audio_quality.into_into_dart().into_dart(),
+            self.start_ms.into_into_dart().into_dart(),
+            self.end_ms.into_into_dart().into_dart(),
+            self.overwrite.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::media::StartTranscodeRequestDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::media::StartTranscodeRequestDto>
+    for crate::api::media::StartTranscodeRequestDto
+{
+    fn into_into_dart(self) -> crate::api::media::StartTranscodeRequestDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::media::VideoStreamInfoDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -997,6 +1350,15 @@ impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
 
 impl SseEncode
     for StreamSink<crate::api::handshake::BridgeEvent, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
+    }
+}
+
+impl SseEncode
+    for StreamSink<crate::api::media::JobEventDto, flutter_rust_bridge::for_generated::SseCodec>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1122,6 +1484,70 @@ impl SseEncode for i32 {
     }
 }
 
+impl SseEncode for crate::api::media::JobEventDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::media::JobEventKindDto>::sse_encode(self.kind, serializer);
+        <u64>::sse_encode(self.job_id, serializer);
+        <Option<f64>>::sse_encode(self.percent, serializer);
+        <Option<u64>>::sse_encode(self.processed_ms, serializer);
+        <Option<u64>>::sse_encode(self.total_ms, serializer);
+        <Option<f64>>::sse_encode(self.frames_per_second, serializer);
+        <Option<f64>>::sse_encode(self.speed, serializer);
+        <Option<String>>::sse_encode(self.output_path, serializer);
+        <Option<crate::api::media::MediaBridgeError>>::sse_encode(self.error, serializer);
+    }
+}
+
+impl SseEncode for crate::api::media::JobEventKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::media::JobEventKindDto::Preparing => 0,
+                crate::api::media::JobEventKindDto::Progress => 1,
+                crate::api::media::JobEventKindDto::Completed => 2,
+                crate::api::media::JobEventKindDto::Cancelled => 3,
+                crate::api::media::JobEventKindDto::Failed => 4,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::media::JobSnapshotDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u64>::sse_encode(self.job_id, serializer);
+        <crate::api::media::JobStateDto>::sse_encode(self.state, serializer);
+        <String>::sse_encode(self.input_path, serializer);
+        <String>::sse_encode(self.output_path, serializer);
+    }
+}
+
+impl SseEncode for crate::api::media::JobStateDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::media::JobStateDto::Idle => 0,
+                crate::api::media::JobStateDto::Preparing => 1,
+                crate::api::media::JobStateDto::Running => 2,
+                crate::api::media::JobStateDto::Completed => 3,
+                crate::api::media::JobStateDto::Cancelled => 4,
+                crate::api::media::JobStateDto::Failed => 5,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for Vec<crate::api::media::MediaOutputMode> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1139,6 +1565,23 @@ impl SseEncode for Vec<u8> {
         for item in self {
             <u8>::sse_encode(item, serializer);
         }
+    }
+}
+
+impl SseEncode for crate::api::media::MediaAudioQuality {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::media::MediaAudioQuality::High => 0,
+                crate::api::media::MediaAudioQuality::Medium => 1,
+                crate::api::media::MediaAudioQuality::Low => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 
@@ -1250,6 +1693,16 @@ impl SseEncode for Option<f64> {
     }
 }
 
+impl SseEncode for Option<crate::api::media::MediaBridgeError> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::media::MediaBridgeError>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<u16> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1277,6 +1730,19 @@ impl SseEncode for Option<crate::api::media::VideoStreamInfoDto> {
         if let Some(value) = self {
             <crate::api::media::VideoStreamInfoDto>::sse_encode(value, serializer);
         }
+    }
+}
+
+impl SseEncode for crate::api::media::StartTranscodeRequestDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.input_path, serializer);
+        <String>::sse_encode(self.output_path, serializer);
+        <crate::api::media::MediaOutputMode>::sse_encode(self.mode, serializer);
+        <crate::api::media::MediaAudioQuality>::sse_encode(self.audio_quality, serializer);
+        <u64>::sse_encode(self.start_ms, serializer);
+        <u64>::sse_encode(self.end_ms, serializer);
+        <bool>::sse_encode(self.overwrite, serializer);
     }
 }
 

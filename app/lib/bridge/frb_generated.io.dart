@@ -36,6 +36,11 @@ abstract class MediaForgeRustLibApiImplPlatform
   );
 
   @protected
+  RustStreamSink<JobEventDto> dco_decode_StreamSink_job_event_dto_Sse(
+    dynamic raw,
+  );
+
+  @protected
   String dco_decode_String(dynamic raw);
 
   @protected
@@ -57,6 +62,14 @@ abstract class MediaForgeRustLibApiImplPlatform
 
   @protected
   double dco_decode_box_autoadd_f_64(dynamic raw);
+
+  @protected
+  MediaBridgeError dco_decode_box_autoadd_media_bridge_error(dynamic raw);
+
+  @protected
+  StartTranscodeRequestDto dco_decode_box_autoadd_start_transcode_request_dto(
+    dynamic raw,
+  );
 
   @protected
   int dco_decode_box_autoadd_u_16(dynamic raw);
@@ -92,10 +105,25 @@ abstract class MediaForgeRustLibApiImplPlatform
   int dco_decode_i_32(dynamic raw);
 
   @protected
+  JobEventDto dco_decode_job_event_dto(dynamic raw);
+
+  @protected
+  JobEventKindDto dco_decode_job_event_kind_dto(dynamic raw);
+
+  @protected
+  JobSnapshotDto dco_decode_job_snapshot_dto(dynamic raw);
+
+  @protected
+  JobStateDto dco_decode_job_state_dto(dynamic raw);
+
+  @protected
   List<MediaOutputMode> dco_decode_list_media_output_mode(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  MediaAudioQuality dco_decode_media_audio_quality(dynamic raw);
 
   @protected
   MediaBridgeError dco_decode_media_bridge_error(dynamic raw);
@@ -124,6 +152,9 @@ abstract class MediaForgeRustLibApiImplPlatform
   double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
 
   @protected
+  MediaBridgeError? dco_decode_opt_box_autoadd_media_bridge_error(dynamic raw);
+
+  @protected
   int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
 
   @protected
@@ -133,6 +164,9 @@ abstract class MediaForgeRustLibApiImplPlatform
   VideoStreamInfoDto? dco_decode_opt_box_autoadd_video_stream_info_dto(
     dynamic raw,
   );
+
+  @protected
+  StartTranscodeRequestDto dco_decode_start_transcode_request_dto(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
@@ -164,6 +198,11 @@ abstract class MediaForgeRustLibApiImplPlatform
   );
 
   @protected
+  RustStreamSink<JobEventDto> sse_decode_StreamSink_job_event_dto_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
@@ -191,6 +230,16 @@ abstract class MediaForgeRustLibApiImplPlatform
 
   @protected
   double sse_decode_box_autoadd_f_64(SseDeserializer deserializer);
+
+  @protected
+  MediaBridgeError sse_decode_box_autoadd_media_bridge_error(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  StartTranscodeRequestDto sse_decode_box_autoadd_start_transcode_request_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
@@ -230,12 +279,29 @@ abstract class MediaForgeRustLibApiImplPlatform
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
+  JobEventDto sse_decode_job_event_dto(SseDeserializer deserializer);
+
+  @protected
+  JobEventKindDto sse_decode_job_event_kind_dto(SseDeserializer deserializer);
+
+  @protected
+  JobSnapshotDto sse_decode_job_snapshot_dto(SseDeserializer deserializer);
+
+  @protected
+  JobStateDto sse_decode_job_state_dto(SseDeserializer deserializer);
+
+  @protected
   List<MediaOutputMode> sse_decode_list_media_output_mode(
     SseDeserializer deserializer,
   );
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  MediaAudioQuality sse_decode_media_audio_quality(
+    SseDeserializer deserializer,
+  );
 
   @protected
   MediaBridgeError sse_decode_media_bridge_error(SseDeserializer deserializer);
@@ -266,6 +332,11 @@ abstract class MediaForgeRustLibApiImplPlatform
   double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
 
   @protected
+  MediaBridgeError? sse_decode_opt_box_autoadd_media_bridge_error(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
@@ -273,6 +344,11 @@ abstract class MediaForgeRustLibApiImplPlatform
 
   @protected
   VideoStreamInfoDto? sse_decode_opt_box_autoadd_video_stream_info_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  StartTranscodeRequestDto sse_decode_start_transcode_request_dto(
     SseDeserializer deserializer,
   );
 
@@ -312,6 +388,12 @@ abstract class MediaForgeRustLibApiImplPlatform
   );
 
   @protected
+  void sse_encode_StreamSink_job_event_dto_Sse(
+    RustStreamSink<JobEventDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
@@ -343,6 +425,18 @@ abstract class MediaForgeRustLibApiImplPlatform
 
   @protected
   void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_media_bridge_error(
+    MediaBridgeError self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_start_transcode_request_dto(
+    StartTranscodeRequestDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
@@ -393,6 +487,24 @@ abstract class MediaForgeRustLibApiImplPlatform
   void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_job_event_dto(JobEventDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_job_event_kind_dto(
+    JobEventKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_job_snapshot_dto(
+    JobSnapshotDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_job_state_dto(JobStateDto self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_media_output_mode(
     List<MediaOutputMode> self,
     SseSerializer serializer,
@@ -401,6 +513,12 @@ abstract class MediaForgeRustLibApiImplPlatform
   @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_media_audio_quality(
+    MediaAudioQuality self,
     SseSerializer serializer,
   );
 
@@ -441,6 +559,12 @@ abstract class MediaForgeRustLibApiImplPlatform
   void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_media_bridge_error(
+    MediaBridgeError? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
 
   @protected
@@ -449,6 +573,12 @@ abstract class MediaForgeRustLibApiImplPlatform
   @protected
   void sse_encode_opt_box_autoadd_video_stream_info_dto(
     VideoStreamInfoDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_start_transcode_request_dto(
+    StartTranscodeRequestDto self,
     SseSerializer serializer,
   );
 

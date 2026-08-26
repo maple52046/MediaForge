@@ -3,6 +3,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/bridge_runtime.dart';
+import 'src/conversion_service.dart';
 import 'src/media_probe_service.dart';
 import 'src/mediaforge_app.dart';
 import 'src/mf_tokens.dart';
@@ -57,6 +58,7 @@ Future<void> main() async {
       showSettingsPopover: showSettingsPopover,
       previewSource: previewSource.isEmpty ? null : previewSource,
       mediaProbeService: const RustMediaProbeService(),
+      conversionService: const RustConversionService(),
     ),
   );
   await windowReady;

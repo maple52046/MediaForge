@@ -1,8 +1,5 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
-import 'media_metadata.dart';
 import 'preview_controller.dart';
 
 /// Theme choices displayed by the fake settings popover.
@@ -114,114 +111,6 @@ class PreviewPrototypeController extends PreviewController {
     }
     _volumePercent = next;
     notifyListeners();
-  }
-}
-
-/// Owns fake output selection, progress, and cancellation state.
-class ConversionPrototypeController extends ChangeNotifier {
-  /// Creates deterministic conversion state for the M2 prototype.
-  ConversionPrototypeController({
-    bool initiallyConverting = false,
-    this.autoAdvanceProgress = false,
-  }) : _converting = initiallyConverting,
-       _progress = initiallyConverting ? 0.62 : 0 {
-    if (_converting) {
-      _startProgressTimer();
-    }
-  }
-
-  /// Whether the prototype advances progress on a presentation-only timer.
-  final bool autoAdvanceProgress;
-  Timer? _progressTimer;
-  List<MediaOutputMode> _availableModes = MediaOutputMode.values;
-  MediaOutputMode _mode = MediaOutputMode.videoWithAudio;
-  bool _converting;
-  double _progress;
-
-  /// Selected fake output mode.
-  MediaOutputMode get mode => _mode;
-
-  /// Rust-authoritative recipes available for the committed source.
-  List<MediaOutputMode> get availableModes => _availableModes;
-
-  /// Whether fake conversion is active.
-  bool get converting => _converting;
-
-  /// Fake conversion completion from zero through one.
-  double get progress => _progress;
-
-  /// Selects an output mode while conversion is idle.
-  void selectMode(MediaOutputMode mode) {
-    if (_converting || _mode == mode || !_availableModes.contains(mode)) {
-      return;
-    }
-    _mode = mode;
-    notifyListeners();
-  }
-
-  /// Replaces mode availability with the ordered recipes from Rust metadata.
-  void setAvailableModes(List<MediaOutputMode> modes) {
-    if (modes.isEmpty) {
-      throw ArgumentError.value(modes, 'modes', 'must not be empty');
-    }
-    final next = List<MediaOutputMode>.unmodifiable(modes);
-    final nextMode = next.contains(_mode) ? _mode : next.first;
-    if (listEquals(_availableModes, next) && _mode == nextMode) {
-      return;
-    }
-    _availableModes = next;
-    _mode = nextMode;
-    notifyListeners();
-  }
-
-  /// Starts the fake conversion and optional animated progress.
-  void start() {
-    if (_converting) {
-      return;
-    }
-    _converting = true;
-    _progress = 0.08;
-    _startProgressTimer();
-    notifyListeners();
-  }
-
-  /// Cancels fake conversion and returns to the ready state.
-  void cancel() {
-    if (!_converting) {
-      return;
-    }
-    _progressTimer?.cancel();
-    _progressTimer = null;
-    _converting = false;
-    _progress = 0;
-    notifyListeners();
-  }
-
-  void _startProgressTimer() {
-    if (!autoAdvanceProgress || _progressTimer != null) {
-      return;
-    }
-    _progressTimer = Timer.periodic(const Duration(milliseconds: 180), (
-      Timer timer,
-    ) {
-      if (!_converting) {
-        timer.cancel();
-        _progressTimer = null;
-        return;
-      }
-      _progress = (_progress + 0.012).clamp(0, 0.96);
-      if (_progress >= 0.96) {
-        timer.cancel();
-        _progressTimer = null;
-      }
-      notifyListeners();
-    });
-  }
-
-  @override
-  void dispose() {
-    _progressTimer?.cancel();
-    super.dispose();
   }
 }
 

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'conversion_controller.dart';
 import 'media_metadata.dart';
 import 'media_session_controller.dart';
 import 'media_time.dart';
@@ -38,7 +39,7 @@ class MediaForgePrototypeScreen extends StatelessWidget {
   final TimelineController timeline;
 
   /// Fake mode, progress, and cancellation state.
-  final ConversionPrototypeController conversion;
+  final ConversionController conversion;
 
   /// Fake settings popover state.
   final SettingsPrototypeController settings;
@@ -564,7 +565,7 @@ class _LoadedWorkspace extends StatelessWidget {
   final PreviewController preview;
   final Widget? nativePreviewSurface;
   final TimelineController timeline;
-  final ConversionPrototypeController conversion;
+  final ConversionController conversion;
 
   @override
   Widget build(BuildContext context) {
@@ -1226,7 +1227,7 @@ class _ConversionPane extends StatelessWidget {
 
   final MediaSessionController mediaSession;
   final TimelineController timeline;
-  final ConversionPrototypeController conversion;
+  final ConversionController conversion;
 
   @override
   Widget build(BuildContext context) {
@@ -1243,17 +1244,26 @@ class _ConversionPane extends StatelessWidget {
                 timeline: timeline,
                 conversion: conversion,
               )
-            : _ReadyContent(mediaSession: mediaSession, conversion: conversion),
+            : _ReadyContent(
+                mediaSession: mediaSession,
+                timeline: timeline,
+                conversion: conversion,
+              ),
       ),
     );
   }
 }
 
 class _ReadyContent extends StatelessWidget {
-  const _ReadyContent({required this.mediaSession, required this.conversion});
+  const _ReadyContent({
+    required this.mediaSession,
+    required this.timeline,
+    required this.conversion,
+  });
 
   final MediaSessionController mediaSession;
-  final ConversionPrototypeController conversion;
+  final TimelineController timeline;
+  final ConversionController conversion;
 
   @override
   Widget build(BuildContext context) {
@@ -1284,7 +1294,24 @@ class _ReadyContent extends StatelessWidget {
         const SizedBox(height: MfSpacing.md),
         const _SectionLabel('DESTINATION'),
         const SizedBox(height: MfSpacing.xs),
-        _DestinationField(extension: values.extension),
+        _DestinationField(outputPath: conversion.outputPath),
+        if (conversion.failure case final failure?) ...[
+          const SizedBox(height: MfSpacing.xs),
+          Text(
+            failure.code.name,
+            key: const Key('conversion-error'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: MfPalette.accentBright, fontSize: 10),
+          ),
+        ] else if (conversion.completedOutputPath != null) ...[
+          const SizedBox(height: MfSpacing.xs),
+          const Text(
+            'Conversion completed',
+            key: Key('conversion-completed'),
+            style: TextStyle(color: MfPalette.accentBright, fontSize: 10),
+          ),
+        ],
         const Spacer(),
         Row(
           children: [
@@ -1304,7 +1331,14 @@ class _ReadyContent extends StatelessWidget {
           key: const Key('start-conversion'),
           width: double.infinity,
           height: 40,
-          onPressed: conversion.start,
+          onPressed: conversion.canStart
+              ? () async {
+                  await conversion.start(
+                    startMs: timeline.startMs,
+                    endMs: timeline.endMs,
+                  );
+                }
+              : null,
           child: Text(values.actionLabel),
         ),
       ],
@@ -1321,7 +1355,7 @@ class _ConvertingContent extends StatelessWidget {
 
   final MediaSessionController mediaSession;
   final TimelineController timeline;
-  final ConversionPrototypeController conversion;
+  final ConversionController conversion;
 
   @override
   Widget build(BuildContext context) {
@@ -1397,7 +1431,7 @@ class _ConvertingContent extends StatelessWidget {
           key: const Key('cancel-conversion'),
           width: double.infinity,
           height: 40,
-          onPressed: conversion.cancel,
+          onPressed: conversion.canCancel ? conversion.cancel : null,
           child: const Text('Cancel conversion'),
         ),
       ],
@@ -1531,7 +1565,7 @@ String _sourceDescription(MediaMetadata media) {
 class _SegmentedModes extends StatelessWidget {
   const _SegmentedModes({required this.conversion});
 
-  final ConversionPrototypeController conversion;
+  final ConversionController conversion;
 
   @override
   Widget build(BuildContext context) {
@@ -1691,12 +1725,22 @@ class _OptionRow extends StatelessWidget {
 }
 
 class _DestinationField extends StatelessWidget {
-  const _DestinationField({required this.extension});
+  const _DestinationField({required this.outputPath});
 
-  final String extension;
+  final String? outputPath;
 
   @override
   Widget build(BuildContext context) {
+    final path = outputPath;
+    final separator = path?.lastIndexOf('/') ?? -1;
+    final fileName = path == null
+        ? 'Preparing destination…'
+        : path.substring(separator + 1);
+    final parent = path == null
+        ? 'Waiting for backend proposal'
+        : separator <= 0
+        ? '.'
+        : path.substring(0, separator);
     return Container(
       height: 62,
       padding: const EdgeInsets.symmetric(
@@ -1712,17 +1756,17 @@ class _DestinationField extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'ScreenRecording_08-13-2026.$extension',
+            fileName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: MfPalette.foreground, fontSize: 11),
           ),
           const SizedBox(height: MfSpacing.xxs),
-          const Text(
-            '~/Movies/MediaForge',
+          Text(
+            parent,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: MfPalette.faint, fontSize: 10),
+            style: const TextStyle(color: MfPalette.faint, fontSize: 10),
           ),
         ],
       ),
@@ -1848,7 +1892,6 @@ class _ModePresentation {
     required this.container,
     required this.video,
     required this.audio,
-    required this.extension,
     required this.estimatedSize,
     required this.actionLabel,
   });
@@ -1859,7 +1902,6 @@ class _ModePresentation {
         container: 'MP4',
         video: 'H.264 · Hardware',
         audio: 'AAC · 160 kbps',
-        extension: 'mp4',
         estimatedSize: '8–10 MB',
         actionLabel: 'Convert video',
       ),
@@ -1867,7 +1909,6 @@ class _ModePresentation {
         container: 'MP4',
         video: 'H.264 · Hardware',
         audio: 'None',
-        extension: 'mp4',
         estimatedSize: '7–9 MB',
         actionLabel: 'Convert video',
       ),
@@ -1875,7 +1916,6 @@ class _ModePresentation {
         container: 'MP3',
         video: 'None',
         audio: 'MP3 · 192 kbps',
-        extension: 'mp3',
         estimatedSize: '1–2 MB',
         actionLabel: 'Convert audio',
       ),
@@ -1885,7 +1925,6 @@ class _ModePresentation {
   final String container;
   final String video;
   final String audio;
-  final String extension;
   final String estimatedSize;
   final String actionLabel;
 }

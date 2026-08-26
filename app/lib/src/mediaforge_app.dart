@@ -4,6 +4,8 @@ import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'conversion_controller.dart';
+import 'conversion_service.dart';
 import 'media_kit_preview.dart';
 import 'media_probe_service.dart';
 import 'media_session_controller.dart';
@@ -24,12 +26,17 @@ class MediaForgePrototypeApp extends StatefulWidget {
     this.showSettingsPopover = false,
     this.previewSource,
     this.mediaProbeService,
+    this.conversionService,
     this.previewController,
     this.previewSurface,
     super.key,
   }) : assert(
          previewSurface == null || previewController != null,
          'A native preview surface requires its matching controller.',
+       ),
+       assert(
+         conversionService == null || mediaProbeService != null,
+         'Native conversion requires the matching media probe service.',
        );
 
   /// Prototype state shown for the current process.
@@ -50,6 +57,9 @@ class MediaForgePrototypeApp extends StatefulWidget {
   /// Optional native probe boundary; omission retains deterministic visual data.
   final MediaProbeService? mediaProbeService;
 
+  /// Optional native conversion boundary; omission retains fake progress.
+  final ConversionService? conversionService;
+
   /// Optional preview state whose ownership transfers to this app root.
   final PreviewController? previewController;
 
@@ -66,8 +76,9 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
   Widget? _nativePreviewSurface;
   String? _previewSourcePath;
   String? _timelineSourcePath;
+  String? _conversionSourcePath;
   late final TimelineController _timeline;
-  late final ConversionPrototypeController _conversion;
+  late final ConversionController _conversion;
   late final SettingsPrototypeController _settings;
 
   @override
@@ -104,10 +115,16 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
       _nativePreviewSurface = null;
     }
     _timeline = TimelineController();
-    _conversion = ConversionPrototypeController(
-      initiallyConverting: widget.state == PrototypeState.converting,
-      autoAdvanceProgress: widget.autoAdvanceProgress,
-    );
+    final conversionService = widget.conversionService;
+    _conversion = conversionService == null
+        ? ConversionController.prototype(
+            initiallyConverting: widget.state == PrototypeState.converting,
+            autoAdvanceProgress: widget.autoAdvanceProgress,
+          )
+        : ConversionController(
+            service: conversionService,
+            outputPathService: probeService!,
+          );
     _settings = SettingsPrototypeController(
       initiallyOpen: widget.showSettingsPopover,
     );
@@ -115,7 +132,8 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
     _preview.addListener(_handlePreviewChange);
     final initialMedia = _mediaSession.media;
     if (initialMedia != null) {
-      _conversion.setAvailableModes(initialMedia.availableOutputModes);
+      _conversion.setMedia(initialMedia);
+      _conversionSourcePath = initialMedia.path;
       _timelineSourcePath = initialMedia.path;
     }
     if (probeService != null &&
@@ -130,7 +148,10 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
     if (media == null) {
       return;
     }
-    _conversion.setAvailableModes(media.availableOutputModes);
+    if (media.path != _conversionSourcePath) {
+      _conversion.setMedia(media);
+      _conversionSourcePath = media.path;
+    }
     if (media.path != _timelineSourcePath) {
       _timeline.replaceSourceDuration(media.durationMs);
       _timelineSourcePath = media.path;

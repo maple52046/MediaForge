@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:mediaforge/bridge/api/handshake.dart';
 import 'package:mediaforge/bridge/api/media.dart' as bridge;
 import 'package:mediaforge/src/bridge_runtime.dart';
+import 'package:mediaforge/src/conversion_service.dart';
 import 'package:mediaforge/src/media_kit_preview.dart';
 import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/mediaforge_app.dart';
@@ -118,6 +119,13 @@ void main() {
       ),
       endsWith('preview-hevc.mp3'),
     );
+    expect(
+      await bridge.defaultOutputPath(
+        path: media.path,
+        mode: bridge.MediaOutputMode.videoWithAudio,
+      ),
+      endsWith('preview-hevc-converted.mp4'),
+    );
 
     await expectLater(
       bridge.probeMedia(path: '${fixture.path}.missing'),
@@ -145,6 +153,7 @@ void main() {
         state: PrototypeState.empty,
         previewSource: fixture.path,
         mediaProbeService: const RustMediaProbeService(),
+        conversionService: const RustConversionService(),
       ),
     );
     await _waitForNativeState(
@@ -161,6 +170,77 @@ void main() {
     expect(timeline.startMs, 0);
     expect(timeline.endMs, 2000);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('macOS runner completes primary Rust conversion with trim', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 780);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final temporaryDirectory = await Directory.systemTemp.createTemp(
+      'mediaforge-m7-',
+    );
+    final input = File('${temporaryDirectory.path}/primary.mov');
+    final output = File('${temporaryDirectory.path}/primary.mp4');
+    await _bundledFixture('preview-h264.mp4').copy(input.path);
+
+    try {
+      await tester.pumpWidget(
+        MediaForgePrototypeApp(
+          state: PrototypeState.empty,
+          previewSource: input.path,
+          mediaProbeService: const RustMediaProbeService(),
+          conversionService: const RustConversionService(),
+        ),
+      );
+      await _waitForNativeState(
+        tester,
+        () =>
+            find.text('primary.mp4').evaluate().isNotEmpty &&
+            find.byKey(const Key('start-conversion')).evaluate().isNotEmpty,
+      );
+      expect(find.byKey(const Key('mode-videoWithAudio')), findsOneWidget);
+      expect(find.byKey(const Key('mode-videoOnly')), findsNothing);
+      expect(find.byKey(const Key('mode-audioOnly')), findsNothing);
+
+      final startInput = find.descendant(
+        of: find.byKey(const Key('start-time-input')),
+        matching: find.byType(EditableText),
+      );
+      final endInput = find.descendant(
+        of: find.byKey(const Key('end-time-input')),
+        matching: find.byType(EditableText),
+      );
+      await tester.enterText(startInput, '00:00:00.200');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      await tester.enterText(endInput, '00:00:01.200');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('start-conversion')));
+      await _waitForNativeState(
+        tester,
+        () =>
+            find.byKey(const Key('conversion-completed')).evaluate().isNotEmpty,
+        timeout: const Duration(seconds: 20),
+      );
+
+      expect(await output.exists(), isTrue);
+      final outputInfo = await bridge.probeMedia(path: output.path);
+      expect(outputInfo.video, isNotNull);
+      expect(outputInfo.audio, isNotNull);
+      expect(outputInfo.durationMs, inInclusiveRange(900, 1300));
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (await temporaryDirectory.exists()) {
+        await temporaryDirectory.delete(recursive: true);
+      }
+    }
   });
 
   testWidgets('macOS desktop opens and closes settings', (
@@ -323,10 +403,14 @@ void main() {
 }
 
 File _bundledProbeFixture() {
+  return _bundledFixture('preview-hevc.mp4');
+}
+
+File _bundledFixture(String name) {
   final contentsDirectory = File(Platform.resolvedExecutable).parent.parent;
   return File(
     '${contentsDirectory.path}/Frameworks/App.framework/Versions/A/Resources/'
-    'flutter_assets/test/fixtures/preview-hevc.mp4',
+    'flutter_assets/test/fixtures/$name',
   );
 }
 
@@ -357,9 +441,10 @@ void _expectNoWorkspaceScrollable(WidgetTester tester) {
 
 Future<void> _waitForNativeState(
   WidgetTester tester,
-  bool Function() predicate,
-) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  bool Function() predicate, {
+  Duration timeout = const Duration(seconds: 10),
+}) async {
+  final deadline = DateTime.now().add(timeout);
   while (!predicate()) {
     if (DateTime.now().isAfter(deadline)) {
       fail('Timed out waiting for native preview state.');
