@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mediaforge/src/mediaforge_app.dart';
 import 'package:mediaforge/src/mf_icon.dart';
+import 'package:mediaforge/src/mf_timeline.dart';
 import 'package:mediaforge/src/preview_controller.dart';
 import 'package:mediaforge/src/prototype_state.dart';
 
@@ -23,7 +24,7 @@ void main() {
 
           expect(find.byKey(const Key('app-header')), findsOneWidget);
           expect(tester.takeException(), isNull);
-          expect(find.byType(Scrollable), findsNothing);
+          _expectNoWorkspaceScrollable(tester);
         },
       );
     }
@@ -45,7 +46,7 @@ void main() {
     expect(find.byKey(const Key('settings-popover')), findsOneWidget);
     expect(find.byKey(const Key('drop-overlay')), findsOneWidget);
     expect(tester.takeException(), isNull);
-    expect(find.byType(Scrollable), findsNothing);
+    _expectNoWorkspaceScrollable(tester);
   });
 
   testWidgets('settings popover responds to choices and close', (
@@ -181,6 +182,54 @@ void main() {
     expect(icon.icon, MfIconData.pause);
   });
 
+  testWidgets('timeline input and preview position stay synchronized', (
+    WidgetTester tester,
+  ) async {
+    await _setSurfaceSize(tester, const Size(1200, 780));
+    final preview = _TrackingPreviewController();
+    await tester.pumpWidget(
+      MediaForgePrototypeApp(
+        state: PrototypeState.loaded,
+        previewController: preview,
+      ),
+    );
+
+    preview.emitPosition(1700);
+    await tester.pump();
+    expect(tester.widget<MfTimeline>(find.byType(MfTimeline)).playheadMs, 1700);
+
+    final startInput = find.descendant(
+      of: find.byKey(const Key('start-time-input')),
+      matching: find.byType(EditableText),
+    );
+    await tester.enterText(startInput, '00:00:01.200');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(preview.seekCommands.last, 1200);
+    expect(tester.widget<MfTimeline>(find.byType(MfTimeline)).startMs, 1200);
+
+    await tester.enterText(startInput, '00:60:00');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(tester.widget<EditableText>(startInput).controller.text, '00:60:00');
+    expect(preview.seekCommands.last, 1200);
+    await tester.tap(find.text('Trim range'));
+    await tester.pump();
+    expect(
+      tester.widget<EditableText>(startInput).controller.text,
+      '00:00:01.200',
+    );
+
+    await tester.tap(find.byKey(const Key('play-selection')));
+    expect(preview.selectionCommands.last, (1200, 3606));
+
+    await tester.tap(find.byKey(const Key('reset-trim')));
+    await tester.pump();
+    expect(preview.seekCommands.last, 0);
+    expect(tester.widget<MfTimeline>(find.byType(MfTimeline)).startMs, 0);
+    expect(tester.widget<MfTimeline>(find.byType(MfTimeline)).endMs, 3856);
+  });
+
   testWidgets('preview failure degrades without hiding conversion', (
     WidgetTester tester,
   ) async {
@@ -225,6 +274,15 @@ Future<void> _setSurfaceSize(WidgetTester tester, Size size) async {
   addTearDown(() => tester.binding.setSurfaceSize(null));
 }
 
+void _expectNoWorkspaceScrollable(WidgetTester tester) {
+  for (final element in find.byType(Scrollable).evaluate()) {
+    final renderObject = element.renderObject;
+    if (renderObject is RenderBox) {
+      expect(renderObject.size.height, lessThan(100));
+    }
+  }
+}
+
 class _UnavailablePreviewController extends PreviewController {
   @override
   PreviewAvailability get availability => PreviewAvailability.unavailable;
@@ -245,7 +303,7 @@ class _UnavailablePreviewController extends PreviewController {
   int get volumePercent => 78;
 
   @override
-  void playSelection(int startMs) {}
+  void playSelection(int startMs, int endMs) {}
 
   @override
   void seek(int positionMs) {}
@@ -255,4 +313,58 @@ class _UnavailablePreviewController extends PreviewController {
 
   @override
   void togglePlayback() {}
+}
+
+class _TrackingPreviewController extends PreviewController {
+  int _positionMs = 842;
+  bool _playing = false;
+  final List<int> seekCommands = <int>[];
+  final List<(int, int)> selectionCommands = <(int, int)>[];
+
+  @override
+  PreviewAvailability get availability => PreviewAvailability.placeholder;
+
+  @override
+  String? get diagnostic => null;
+
+  @override
+  int get durationMs => 3856;
+
+  @override
+  bool get playing => _playing;
+
+  @override
+  int get positionMs => _positionMs;
+
+  @override
+  int get volumePercent => 78;
+
+  void emitPosition(int valueMs) {
+    _positionMs = valueMs;
+    notifyListeners();
+  }
+
+  @override
+  void playSelection(int startMs, int endMs) {
+    selectionCommands.add((startMs, endMs));
+    _positionMs = startMs;
+    _playing = true;
+    notifyListeners();
+  }
+
+  @override
+  void seek(int positionMs) {
+    seekCommands.add(positionMs);
+    _positionMs = positionMs;
+    notifyListeners();
+  }
+
+  @override
+  void setVolume(int volumePercent) {}
+
+  @override
+  void togglePlayback() {
+    _playing = !_playing;
+    notifyListeners();
+  }
 }

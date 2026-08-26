@@ -12,6 +12,7 @@ import 'preview_controller.dart';
 import 'prototype_controllers.dart';
 import 'prototype_screen.dart';
 import 'prototype_state.dart';
+import 'timeline_controller.dart';
 
 /// Flutter composition root for native preview and backend-probed media state.
 class MediaForgePrototypeApp extends StatefulWidget {
@@ -64,7 +65,8 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
   late PreviewController _preview;
   Widget? _nativePreviewSurface;
   String? _previewSourcePath;
-  late final TimelinePrototypeController _timeline;
+  String? _timelineSourcePath;
+  late final TimelineController _timeline;
   late final ConversionPrototypeController _conversion;
   late final SettingsPrototypeController _settings;
 
@@ -101,7 +103,7 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
       _preview = PreviewPrototypeController();
       _nativePreviewSurface = null;
     }
-    _timeline = TimelinePrototypeController();
+    _timeline = TimelineController();
     _conversion = ConversionPrototypeController(
       initiallyConverting: widget.state == PrototypeState.converting,
       autoAdvanceProgress: widget.autoAdvanceProgress,
@@ -110,9 +112,11 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
       initiallyOpen: widget.showSettingsPopover,
     );
     _mediaSession.addListener(_handleMediaSessionChange);
+    _preview.addListener(_handlePreviewChange);
     final initialMedia = _mediaSession.media;
     if (initialMedia != null) {
       _conversion.setAvailableModes(initialMedia.availableOutputModes);
+      _timelineSourcePath = initialMedia.path;
     }
     if (probeService != null &&
         previewSource != null &&
@@ -127,12 +131,17 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
       return;
     }
     _conversion.setAvailableModes(media.availableOutputModes);
+    if (media.path != _timelineSourcePath) {
+      _timeline.replaceSourceDuration(media.durationMs);
+      _timelineSourcePath = media.path;
+    }
     if (widget.mediaProbeService == null || media.path == _previewSourcePath) {
       return;
     }
 
     final previousPreview = _preview;
     final nativePreview = MediaKitPreviewSession(source: media.path);
+    previousPreview.removeListener(_handlePreviewChange);
     setState(() {
       _preview = nativePreview.preview;
       _nativePreviewSurface = media.video == null
@@ -140,12 +149,18 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
           : MediaKitVideoSurface(controller: nativePreview.video);
       _previewSourcePath = media.path;
     });
+    _preview.addListener(_handlePreviewChange);
     previousPreview.dispose();
+  }
+
+  void _handlePreviewChange() {
+    _timeline.setPlayhead(_preview.positionMs);
   }
 
   @override
   void dispose() {
     _mediaSession.removeListener(_handleMediaSessionChange);
+    _preview.removeListener(_handlePreviewChange);
     _settings.dispose();
     _conversion.dispose();
     _timeline.dispose();

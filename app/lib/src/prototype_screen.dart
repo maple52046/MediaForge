@@ -7,13 +7,15 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'media_metadata.dart';
 import 'media_session_controller.dart';
+import 'media_time.dart';
 import 'mf_icon.dart';
 import 'mf_timeline.dart';
 import 'mf_tokens.dart';
 import 'preview_controller.dart';
 import 'prototype_controllers.dart';
+import 'timeline_controller.dart';
 
-/// Interactive MediaForge workspace with optional native M3 preview output.
+/// Interactive MediaForge workspace with optional native preview output.
 class MediaForgePrototypeScreen extends StatelessWidget {
   /// Creates the presentation from focused controllers and native video edge.
   const MediaForgePrototypeScreen({
@@ -32,8 +34,8 @@ class MediaForgePrototypeScreen extends StatelessWidget {
   /// Framework-free preview playback state.
   final PreviewController preview;
 
-  /// Fake integer-millisecond timeline state.
-  final TimelinePrototypeController timeline;
+  /// Integer-millisecond trim and preview position state.
+  final TimelineController timeline;
 
   /// Fake mode, progress, and cancellation state.
   final ConversionPrototypeController conversion;
@@ -561,7 +563,7 @@ class _LoadedWorkspace extends StatelessWidget {
   final MediaSessionController mediaSession;
   final PreviewController preview;
   final Widget? nativePreviewSurface;
-  final TimelinePrototypeController timeline;
+  final TimelineController timeline;
   final ConversionPrototypeController conversion;
 
   @override
@@ -598,7 +600,7 @@ class _PreviewColumn extends StatelessWidget {
 
   final PreviewController preview;
   final Widget? nativePreviewSurface;
-  final TimelinePrototypeController timeline;
+  final TimelineController timeline;
 
   @override
   Widget build(BuildContext context) {
@@ -639,7 +641,7 @@ class _PreviewSurface extends StatelessWidget {
 
   final PreviewController preview;
   final Widget? nativePreviewSurface;
-  final TimelinePrototypeController timeline;
+  final TimelineController timeline;
 
   @override
   Widget build(BuildContext context) {
@@ -704,7 +706,7 @@ class _PreviewControls extends StatelessWidget {
   const _PreviewControls({required this.preview, required this.timeline});
 
   final PreviewController preview;
-  final TimelinePrototypeController timeline;
+  final TimelineController timeline;
 
   @override
   Widget build(BuildContext context) {
@@ -733,13 +735,13 @@ class _PreviewControls extends StatelessWidget {
           ),
           const SizedBox(width: MfSpacing.xs),
           Text(
-            formatPrototypeTimestamp(preview.positionMs).substring(3),
+            formatMediaTime(preview.positionMs),
             key: const Key('preview-position'),
             style: const TextStyle(color: MfPalette.foreground, fontSize: 12),
           ),
           const SizedBox(width: MfSpacing.xs),
           Text(
-            '/  ${formatPrototypeTimestamp(preview.durationMs > 0 ? preview.durationMs : timeline.durationMs).substring(3)}',
+            '/  ${formatMediaTime(preview.durationMs > 0 ? preview.durationMs : timeline.durationMs)}',
             style: const TextStyle(color: MfPalette.faint, fontSize: 12),
           ),
           const Spacer(),
@@ -878,7 +880,7 @@ class _TimelinePanel extends StatelessWidget {
   const _TimelinePanel({required this.preview, required this.timeline});
 
   final PreviewController preview;
-  final TimelinePrototypeController timeline;
+  final TimelineController timeline;
 
   @override
   Widget build(BuildContext context) {
@@ -909,7 +911,7 @@ class _TimelinePanel extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '${(timeline.selectedDurationMs / 1000).toStringAsFixed(3)} seconds selected',
+                  '${formatMediaTime(timeline.selectedDurationMs)} selected',
                   style: const TextStyle(color: MfPalette.muted, fontSize: 11),
                 ),
               ],
@@ -921,8 +923,14 @@ class _TimelinePanel extends StatelessWidget {
                 startMs: timeline.startMs,
                 endMs: timeline.endMs,
                 playheadMs: timeline.playheadMs,
-                onStartChanged: timeline.setStart,
-                onEndChanged: timeline.setEnd,
+                onStartChanged: (int valueMs) {
+                  timeline.setStart(valueMs);
+                  preview.seek(timeline.startMs);
+                },
+                onEndChanged: (int valueMs) {
+                  timeline.setEnd(valueMs);
+                  preview.seek(timeline.endMs);
+                },
                 onPlayheadChanged: (int valueMs) {
                   timeline.setPlayhead(valueMs);
                   preview.seek(valueMs);
@@ -933,13 +941,29 @@ class _TimelinePanel extends StatelessWidget {
             Row(
               children: [
                 _TimeField(
+                  inputKey: const Key('start-time-input'),
                   label: 'START',
-                  value: formatPrototypeTimestamp(timeline.startMs),
+                  valueMs: timeline.startMs,
+                  onSubmitted: (String value) {
+                    final committed = timeline.commitStartText(value);
+                    if (committed != null) {
+                      preview.seek(committed);
+                    }
+                    return committed;
+                  },
                 ),
                 const SizedBox(width: MfSpacing.xs),
                 _TimeField(
+                  inputKey: const Key('end-time-input'),
                   label: 'END',
-                  value: formatPrototypeTimestamp(timeline.endMs),
+                  valueMs: timeline.endMs,
+                  onSubmitted: (String value) {
+                    final committed = timeline.commitEndText(value);
+                    if (committed != null) {
+                      preview.seek(committed);
+                    }
+                    return committed;
+                  },
                 ),
                 const Spacer(),
                 _CompactAction(
@@ -955,10 +979,20 @@ class _TimelinePanel extends StatelessWidget {
                 ),
                 const SizedBox(width: MfSpacing.xxs),
                 _CompactAction(
+                  key: const Key('reset-trim'),
+                  label: 'Reset',
+                  onPressed: () {
+                    timeline.reset();
+                    preview.seek(0);
+                  },
+                ),
+                const SizedBox(width: MfSpacing.xxs),
+                _CompactAction(
                   key: const Key('play-selection'),
                   label: 'Play Selection',
                   emphasized: true,
-                  onPressed: () => preview.playSelection(timeline.startMs),
+                  onPressed: () =>
+                      preview.playSelection(timeline.startMs, timeline.endMs),
                 ),
               ],
             ),
@@ -969,41 +1003,122 @@ class _TimelinePanel extends StatelessWidget {
   }
 }
 
-class _TimeField extends StatelessWidget {
-  const _TimeField({required this.label, required this.value});
+class _TimeField extends StatefulWidget {
+  const _TimeField({
+    required this.inputKey,
+    required this.label,
+    required this.valueMs,
+    required this.onSubmitted,
+  });
 
+  final Key inputKey;
   final String label;
-  final String value;
+  final int valueMs;
+  final int? Function(String value) onSubmitted;
+
+  @override
+  State<_TimeField> createState() => _TimeFieldState();
+}
+
+class _TimeFieldState extends State<_TimeField> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+  bool _valid = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: _formattedValue);
+    _focusNode = FocusNode(debugLabel: 'Trim ${widget.label} time');
+    _focusNode.addListener(_handleFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TimeField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.valueMs != widget.valueMs && !_focusNode.hasFocus) {
+      _replaceText(_formattedValue);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleFocusChange);
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String get _formattedValue =>
+      formatMediaTime(widget.valueMs, includeMilliseconds: true);
+
+  void _handleFocusChange() {
+    if (!_focusNode.hasFocus && !_valid) {
+      setState(() {
+        _valid = true;
+        _replaceText(_formattedValue);
+      });
+    }
+  }
+
+  void _submit(String value) {
+    final committed = widget.onSubmitted(value);
+    setState(() {
+      _valid = committed != null;
+      if (committed != null) {
+        _replaceText(formatMediaTime(committed, includeMilliseconds: true));
+      }
+    });
+  }
+
+  void _replaceText(String value) {
+    _controller.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 108,
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: MfSpacing.xxs),
-      decoration: BoxDecoration(
-        color: MfPalette.elevated,
-        borderRadius: BorderRadius.circular(MfRadius.sm),
-        border: Border.all(color: MfPalette.border),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: MfPalette.faint,
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-            ),
+    return Semantics(
+      label: 'Trim ${widget.label.toLowerCase()} time',
+      textField: true,
+      child: ShadInput(
+        key: widget.inputKey,
+        controller: _controller,
+        focusNode: _focusNode,
+        constraints: const BoxConstraints.tightFor(width: 118, height: 32),
+        padding: EdgeInsets.zero,
+        inputPadding: const EdgeInsets.symmetric(horizontal: MfSpacing.xxs),
+        gap: MfSpacing.xxs,
+        leading: Text(
+          widget.label,
+          style: const TextStyle(
+            color: MfPalette.faint,
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
           ),
-          const SizedBox(height: 1),
-          Text(
-            value,
-            style: const TextStyle(color: MfPalette.foreground, fontSize: 10),
-          ),
+        ),
+        style: TextStyle(
+          color: _valid ? MfPalette.foreground : MfPalette.accentBright,
+          fontSize: 10,
+        ),
+        cursorColor: MfPalette.accentBright,
+        textInputAction: TextInputAction.done,
+        autocorrect: false,
+        enableSuggestions: false,
+        onEditingComplete: () {},
+        onPressedOutside: (_) => _focusNode.unfocus(),
+        inputFormatters: <TextInputFormatter>[
+          FilteringTextInputFormatter.allow(RegExp(r'[0-9:.]')),
+          LengthLimitingTextInputFormatter(24),
         ],
+        onChanged: (_) {
+          if (!_valid) {
+            setState(() => _valid = true);
+          }
+        },
+        onSubmitted: _submit,
       ),
     );
   }
@@ -1110,7 +1225,7 @@ class _ConversionPane extends StatelessWidget {
   });
 
   final MediaSessionController mediaSession;
-  final TimelinePrototypeController timeline;
+  final TimelineController timeline;
   final ConversionPrototypeController conversion;
 
   @override
@@ -1205,7 +1320,7 @@ class _ConvertingContent extends StatelessWidget {
   });
 
   final MediaSessionController mediaSession;
-  final TimelinePrototypeController timeline;
+  final TimelineController timeline;
   final ConversionPrototypeController conversion;
 
   @override
@@ -1410,7 +1525,7 @@ String _sourceDescription(MediaMetadata media) {
   ];
   final sizeMegabytes = media.fileSizeBytes / (1024 * 1024);
   return '${codecs.join(' · ')} · ${sizeMegabytes.toStringAsFixed(1)} MB · '
-      '${formatPrototypeTimestamp(media.durationMs)}';
+      '${formatMediaTime(media.durationMs)}';
 }
 
 class _SegmentedModes extends StatelessWidget {

@@ -191,12 +191,21 @@ impl MediaFacade {
 
     /// Probes one caller-validated local path through the configured backend.
     ///
+    /// A source without a positive duration is rejected because the application
+    /// cannot represent a non-empty trim range for it.
+    ///
     /// # Errors
     ///
     /// Returns a stable [`ApplicationError`] while retaining the backend's
     /// diagnostic cause.
     pub fn probe(&self, path: &Path) -> Result<MediaInfo, ApplicationError> {
-        self.backend.probe(path).map_err(ApplicationError::from)
+        let media = self.backend.probe(path).map_err(ApplicationError::from)?;
+        if media.duration_ms == 0 {
+            return Err(ApplicationError::from(MediaError::UnsupportedInput(
+                "source duration is unavailable".to_owned(),
+            )));
+        }
+        Ok(media)
     }
 }
 
@@ -505,6 +514,7 @@ mod tests {
     struct FakeBackend {
         results: Mutex<VecDeque<Result<(), MediaError>>>,
         wait_for_cancel: bool,
+        probe_duration_ms: u64,
     }
 
     impl FakeBackend {
@@ -512,6 +522,7 @@ mod tests {
             Self {
                 results: Mutex::new(VecDeque::from([Ok(())])),
                 wait_for_cancel: false,
+                probe_duration_ms: 1_000,
             }
         }
 
@@ -519,6 +530,15 @@ mod tests {
             Self {
                 results: Mutex::new(VecDeque::new()),
                 wait_for_cancel: true,
+                probe_duration_ms: 1_000,
+            }
+        }
+
+        fn unknown_duration() -> Self {
+            Self {
+                results: Mutex::new(VecDeque::new()),
+                wait_for_cancel: false,
+                probe_duration_ms: 0,
             }
         }
     }
@@ -538,7 +558,7 @@ mod tests {
                 path: path.to_path_buf(),
                 file_name: "input.mov".to_owned(),
                 file_size_bytes: 1_024,
-                duration_ms: 1_000,
+                duration_ms: self.probe_duration_ms,
                 format: "mov".to_owned(),
                 video: None,
                 audio: None,
@@ -592,6 +612,17 @@ mod tests {
             .unwrap_or_else(|error| panic!("{error}"));
         assert_eq!(media.path, PathBuf::from("/canonical/input.mov"));
         assert_eq!(media.file_size_bytes, 1_024);
+    }
+
+    #[test]
+    fn media_facade_rejects_unknown_duration() {
+        let facade = MediaFacade::new(Arc::new(FakeBackend::unknown_duration()));
+
+        let error = facade
+            .probe(Path::new("/canonical/input.mov"))
+            .expect_err("unknown duration must not enter the presentation layer");
+        assert_eq!(error.code, ErrorCode::UnsupportedInput);
+        assert!(error.message.contains("duration"));
     }
 
     #[test]

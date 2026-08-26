@@ -11,6 +11,7 @@ import 'package:mediaforge/src/bridge_runtime.dart';
 import 'package:mediaforge/src/media_kit_preview.dart';
 import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/mediaforge_app.dart';
+import 'package:mediaforge/src/mf_timeline.dart';
 import 'package:mediaforge/src/preview_controller.dart';
 import 'package:mediaforge/src/prototype_state.dart';
 
@@ -155,6 +156,10 @@ void main() {
 
     expect(find.text('preview-hevc.mp4'), findsOneWidget);
     expect(find.byKey(const Key('preview-fallback')), findsNothing);
+    final timeline = tester.widget<MfTimeline>(find.byType(MfTimeline));
+    expect(timeline.durationMs, 2000);
+    expect(timeline.startMs, 0);
+    expect(timeline.endMs, 2000);
     expect(tester.takeException(), isNull);
   });
 
@@ -236,7 +241,7 @@ void main() {
 
     expect(find.byKey(const Key('preview-fallback')), findsNothing);
     expect(find.byKey(const Key('conversion-pane')), findsOneWidget);
-    expect(find.byType(Scrollable), findsNothing);
+    _expectNoWorkspaceScrollable(tester);
     expect(tester.takeException(), isNull);
   });
 
@@ -306,6 +311,13 @@ void main() {
       );
       session.preview.togglePlayback();
       await _waitForNativeState(tester, () => !session.preview.playing);
+
+      session.preview.playSelection(200, 500);
+      await _waitForNativeState(tester, () => session.preview.playing);
+      await _waitForNativeState(
+        tester,
+        () => !session.preview.playing && session.preview.positionMs == 500,
+      );
     });
   }
 }
@@ -332,6 +344,15 @@ Future<void> _mountLoadedPrototype(WidgetTester tester) async {
 Future<void> _pumpPrototypeMotion(WidgetTester tester) async {
   // Contract: M2 motion tokens complete within 180 ms.
   await tester.pump(const Duration(milliseconds: 250));
+}
+
+void _expectNoWorkspaceScrollable(WidgetTester tester) {
+  for (final element in find.byType(Scrollable).evaluate()) {
+    final renderObject = element.renderObject;
+    if (renderObject is RenderBox) {
+      expect(renderObject.size.height, lessThan(100));
+    }
+  }
 }
 
 Future<void> _waitForNativeState(

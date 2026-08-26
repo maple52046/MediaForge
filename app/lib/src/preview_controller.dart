@@ -38,8 +38,8 @@ abstract class PreviewController extends ChangeNotifier {
   /// Toggles playback when the preview is available.
   void togglePlayback();
 
-  /// Seeks to the selection start and begins playback.
-  void playSelection(int startMs);
+  /// Plays a non-empty selection and pauses when preview reaches its end.
+  void playSelection(int startMs, int endMs);
 
   /// Seeks to a bounded integer-millisecond position.
   void seek(int positionMs);

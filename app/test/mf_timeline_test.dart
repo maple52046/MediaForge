@@ -3,21 +3,34 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mediaforge/src/media_time.dart';
 import 'package:mediaforge/src/mf_timeline.dart';
-import 'package:mediaforge/src/prototype_controllers.dart';
+import 'package:mediaforge/src/timeline_controller.dart';
 
 void main() {
-  test('prototype timestamp formatting preserves integer milliseconds', () {
-    expect(formatPrototypeTimestamp(0), '00:00:00.000');
-    expect(formatPrototypeTimestamp(3723405), '01:02:03.405');
-    expect(formatPrototypeTimestamp(-1), '00:00:00.000');
+  test('media time formatting separates labels from precise editing', () {
+    expect(formatMediaTime(0), '00:00:00');
+    expect(formatMediaTime(3723405), '01:02:03');
+    expect(formatMediaTime(3723405, includeMilliseconds: true), '01:02:03.405');
+    expect(formatMediaTime(-1), '00:00:00');
+  });
+
+  test('media time parsing accepts only the supported precise contract', () {
+    expect(parseMediaTime('00:00:00'), 0);
+    expect(parseMediaTime('01:02:03.405'), 3723405);
+    expect(parseMediaTime('100:00:00'), 360000000);
+    expect(parseMediaTime('1:02:03'), isNull);
+    expect(parseMediaTime('00:60:00'), isNull);
+    expect(parseMediaTime('00:00:00.4'), isNull);
+    expect(parseMediaTime('999999999999999:00:00'), isNull);
+    expect(parseMediaTime('not a time'), isNull);
   });
 
   testWidgets('timeline exposes semantic labels and actions', (
     WidgetTester tester,
   ) async {
     final semantics = tester.ensureSemantics();
-    final controller = TimelinePrototypeController();
+    final controller = TimelineController();
     addTearDown(controller.dispose);
     await _pumpTimeline(tester, controller);
 
@@ -33,7 +46,7 @@ void main() {
   testWidgets('timeline hover and drag update tooltip and marker', (
     WidgetTester tester,
   ) async {
-    final controller = TimelinePrototypeController();
+    final controller = TimelineController();
     addTearDown(controller.dispose);
     await _pumpTimeline(tester, controller);
 
@@ -58,7 +71,7 @@ void main() {
   testWidgets('timeline keyboard uses 100 ms and shifted 1 second steps', (
     WidgetTester tester,
   ) async {
-    final controller = TimelinePrototypeController();
+    final controller = TimelineController();
     addTearDown(controller.dispose);
     await _pumpTimeline(tester, controller);
 
@@ -89,7 +102,7 @@ void main() {
   testWidgets('timeline Home and End honor active marker boundaries', (
     WidgetTester tester,
   ) async {
-    final controller = TimelinePrototypeController();
+    final controller = TimelineController();
     addTearDown(controller.dispose);
     await _pumpTimeline(tester, controller);
 
@@ -109,13 +122,13 @@ void main() {
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.home);
     await tester.pump();
-    expect(controller.playheadMs, controller.startMs);
+    expect(controller.playheadMs, 0);
   });
 }
 
 Future<void> _pumpTimeline(
   WidgetTester tester,
-  TimelinePrototypeController controller,
+  TimelineController controller,
 ) async {
   await tester.pumpWidget(
     Directionality(

@@ -34,6 +34,7 @@ class PreviewPrototypeController extends PreviewController {
   bool _playing = false;
   int _positionMs = 842;
   int _volumePercent = 78;
+  int? _selectionEndMs;
 
   @override
   PreviewAvailability get availability => PreviewAvailability.placeholder;
@@ -59,14 +60,21 @@ class PreviewPrototypeController extends PreviewController {
   /// Toggles fake preview playback.
   @override
   void togglePlayback() {
+    _selectionEndMs = null;
     _playing = !_playing;
     notifyListeners();
   }
 
   /// Starts fake playback at the selected trim boundary.
   @override
-  void playSelection(int startMs) {
-    _positionMs = startMs;
+  void playSelection(int startMs, int endMs) {
+    final start = startMs.clamp(0, durationMs);
+    final end = endMs.clamp(0, durationMs);
+    if (start >= end) {
+      return;
+    }
+    _positionMs = start;
+    _selectionEndMs = end;
     _playing = true;
     notifyListeners();
   }
@@ -74,10 +82,26 @@ class PreviewPrototypeController extends PreviewController {
   /// Moves the fake preview to a timeline position.
   @override
   void seek(int positionMs) {
-    if (_positionMs == positionMs) {
+    final next = positionMs.clamp(0, durationMs);
+    _selectionEndMs = null;
+    if (_positionMs == next) {
       return;
     }
-    _positionMs = positionMs;
+    _positionMs = next;
+    notifyListeners();
+  }
+
+  /// Advances deterministic playback and enforces a pending selection boundary.
+  void updatePlaybackPosition(int positionMs) {
+    final next = positionMs.clamp(0, durationMs);
+    final selectionEnd = _selectionEndMs;
+    if (selectionEnd != null && next >= selectionEnd) {
+      _positionMs = selectionEnd;
+      _selectionEndMs = null;
+      _playing = false;
+    } else {
+      _positionMs = next;
+    }
     notifyListeners();
   }
 
@@ -89,100 +113,6 @@ class PreviewPrototypeController extends PreviewController {
       return;
     }
     _volumePercent = next;
-    notifyListeners();
-  }
-}
-
-/// Owns the M2 trim range and playhead as integer milliseconds.
-class TimelinePrototypeController extends ChangeNotifier {
-  /// Creates a validated fake timeline range.
-  TimelinePrototypeController({
-    this.durationMs = 3856,
-    int startMs = 250,
-    int endMs = 3606,
-    int playheadMs = 842,
-  }) : _startMs = startMs,
-       _endMs = endMs,
-       _playheadMs = playheadMs {
-    if (durationMs <= 0 ||
-        startMs < 0 ||
-        startMs >= endMs ||
-        endMs > durationMs ||
-        playheadMs < startMs ||
-        playheadMs > endMs) {
-      throw ArgumentError('The prototype timeline range is invalid.');
-    }
-  }
-
-  /// Duration of the fake source in milliseconds.
-  final int durationMs;
-
-  int _startMs;
-  int _endMs;
-  int _playheadMs;
-
-  /// Inclusive trim start in milliseconds.
-  int get startMs => _startMs;
-
-  /// Prototype trim end boundary in milliseconds.
-  int get endMs => _endMs;
-
-  /// Current timeline playhead in milliseconds.
-  int get playheadMs => _playheadMs;
-
-  /// Selected duration in milliseconds.
-  int get selectedDurationMs => _endMs - _startMs;
-
-  /// Moves the start handle without allowing an empty selection.
-  void setStart(int valueMs) {
-    final next = valueMs.clamp(0, _endMs - 1);
-    if (_startMs == next) {
-      return;
-    }
-    _startMs = next;
-    if (_playheadMs < next) {
-      _playheadMs = next;
-    }
-    notifyListeners();
-  }
-
-  /// Moves the end handle without allowing an empty selection.
-  void setEnd(int valueMs) {
-    final next = valueMs.clamp(_startMs + 1, durationMs);
-    if (_endMs == next) {
-      return;
-    }
-    _endMs = next;
-    if (_playheadMs > next) {
-      _playheadMs = next;
-    }
-    notifyListeners();
-  }
-
-  /// Moves the playhead inside the current selection.
-  void setPlayhead(int valueMs) {
-    final next = valueMs.clamp(_startMs, _endMs);
-    if (_playheadMs == next) {
-      return;
-    }
-    _playheadMs = next;
-    notifyListeners();
-  }
-
-  /// Sets the start handle to the current playhead.
-  void setStartFromPlayhead() => setStart(_playheadMs);
-
-  /// Sets the end handle to the current playhead.
-  void setEndFromPlayhead() => setEnd(_playheadMs);
-
-  /// Restores the complete fake source range.
-  void reset() {
-    if (_startMs == 0 && _endMs == durationMs && _playheadMs == 0) {
-      return;
-    }
-    _startMs = 0;
-    _endMs = durationMs;
-    _playheadMs = 0;
     notifyListeners();
   }
 }

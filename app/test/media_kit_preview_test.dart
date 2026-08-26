@@ -37,7 +37,7 @@ void main() {
 
     driver.playingController.add(false);
     await _drainEvents();
-    preview.playSelection(-30);
+    preview.playSelection(-30, 1000);
     await _drainEvents();
     expect(driver.seekCommands, <int>[2000, 0]);
     expect(driver.playCount, 1);
@@ -64,7 +64,7 @@ void main() {
 
     preview.togglePlayback();
     preview.seek(100);
-    preview.playSelection(100);
+    preview.playSelection(100, 200);
     await _drainEvents();
     expect(driver.playCount, 0);
     expect(driver.seekCommands, isEmpty);
@@ -85,6 +85,63 @@ void main() {
     await _drainEvents();
     expect(preview.availability, PreviewAvailability.unavailable);
     expect(preview.diagnostic, 'decoder initialization failed');
+
+    await preview.close();
+    preview.dispose();
+  });
+
+  test(
+    'native selection playback pauses and pins position at its end',
+    () async {
+      final driver = _FakePreviewPlaybackDriver();
+      final preview = MediaKitPreviewController(
+        driver: driver,
+        source: 'asset:///test/fixtures/preview-h264.mp4',
+      );
+      await preview.initialized;
+      driver.durationController.add(2000);
+      driver.playingController.add(true);
+      await _drainEvents();
+
+      preview.playSelection(400, 800);
+      await _drainEvents();
+      expect(driver.seekCommands, <int>[400]);
+      expect(driver.playCount, 1);
+
+      driver.positionController.add(800);
+      await _drainEvents();
+      await _drainEvents();
+      expect(preview.positionMs, 800);
+      expect(preview.playing, isFalse);
+      expect(driver.pauseCount, 1);
+      expect(driver.seekCommands, <int>[400, 800]);
+
+      await preview.close();
+      preview.dispose();
+    },
+  );
+
+  test('explicit seek cancels the pending selection boundary', () async {
+    final driver = _FakePreviewPlaybackDriver();
+    final preview = MediaKitPreviewController(
+      driver: driver,
+      source: 'asset:///test/fixtures/preview-h264.mp4',
+    );
+    await preview.initialized;
+    driver.durationController.add(2000);
+    driver.playingController.add(true);
+    await _drainEvents();
+
+    preview.playSelection(400, 800);
+    await _drainEvents();
+    preview.seek(1200);
+    await _drainEvents();
+    driver.positionController.add(1200);
+    await _drainEvents();
+
+    expect(preview.playing, isTrue);
+    expect(preview.positionMs, 1200);
+    expect(driver.pauseCount, 0);
 
     await preview.close();
     preview.dispose();

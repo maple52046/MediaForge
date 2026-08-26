@@ -5,6 +5,7 @@ import 'package:mediaforge/src/media_metadata.dart';
 import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/media_session_controller.dart';
 import 'package:mediaforge/src/prototype_controllers.dart';
+import 'package:mediaforge/src/timeline_controller.dart';
 
 void main() {
   test('media session commits and cancels prototype replacement', () async {
@@ -82,17 +83,17 @@ void main() {
   );
 
   test('timeline preserves a non-empty bounded integer-ms range', () {
-    final controller = TimelinePrototypeController();
+    final controller = TimelineController();
     addTearDown(controller.dispose);
 
     controller.setStart(4000);
     expect(controller.startMs, controller.endMs - 1);
-    expect(controller.playheadMs, controller.startMs);
+    expect(controller.playheadMs, 842);
 
     controller.setEnd(-1);
     expect(controller.endMs, controller.startMs + 1);
     controller.setPlayhead(-500);
-    expect(controller.playheadMs, controller.startMs);
+    expect(controller.playheadMs, 0);
 
     controller.reset();
     expect(controller.startMs, 0);
@@ -102,13 +103,40 @@ void main() {
 
   test('timeline rejects invalid initial state', () {
     expect(
-      () => TimelinePrototypeController(startMs: 800, endMs: 400),
+      () => TimelineController(startMs: 800, endMs: 400),
       throwsArgumentError,
     );
     expect(
-      () => TimelinePrototypeController(playheadMs: 3800, endMs: 3600),
+      () => TimelineController(playheadMs: 4000, endMs: 3600),
       throwsArgumentError,
     );
+  });
+
+  test('timeline replaces source duration and bounds precise text commits', () {
+    final controller = TimelineController();
+    addTearDown(controller.dispose);
+
+    controller.replaceSourceDuration(2000);
+    expect(controller.startMs, 0);
+    expect(controller.endMs, 2000);
+    expect(controller.playheadMs, 0);
+    expect(controller.commitStartText('00:00:01.500'), 1500);
+    expect(controller.commitEndText('00:00:09'), 2000);
+    expect(controller.commitEndText('invalid'), isNull);
+    expect(controller.startMs, 1500);
+    expect(controller.endMs, 2000);
+  });
+
+  test('prototype preview pauses at a requested selection end', () {
+    final preview = PreviewPrototypeController();
+    addTearDown(preview.dispose);
+
+    preview.playSelection(500, 1200);
+    expect(preview.playing, isTrue);
+    expect(preview.positionMs, 500);
+    preview.updatePlaybackPosition(1300);
+    expect(preview.playing, isFalse);
+    expect(preview.positionMs, 1200);
   });
 
   test('conversion locks mode while active and supports cancellation', () {

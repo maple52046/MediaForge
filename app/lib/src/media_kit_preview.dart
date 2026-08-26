@@ -99,6 +99,9 @@ class MediaKitPreviewController extends PreviewController {
   int _durationMs = 0;
   int _volumePercent = 78;
   String? _diagnostic;
+  int? _selectionEndMs;
+  bool _selectionStopRequested = false;
+  int _playbackIntent = 0;
 
   /// Completes after the first source either opens or enters fallback state.
   late final Future<void> initialized;
@@ -126,17 +129,36 @@ class MediaKitPreviewController extends PreviewController {
     if (_availability != PreviewAvailability.ready) {
       return;
     }
-    _schedule(_playing ? _driver.pause : _driver.play);
+    final shouldPause = _playing;
+    final intent = ++_playbackIntent;
+    _selectionEndMs = null;
+    _selectionStopRequested = false;
+    _schedule(() async {
+      if (_closed || intent != _playbackIntent) {
+        return;
+      }
+      await (shouldPause ? _driver.pause() : _driver.play());
+    });
   }
 
   @override
-  void playSelection(int startMs) {
+  void playSelection(int startMs, int endMs) {
     if (_availability != PreviewAvailability.ready) {
       return;
     }
-    final position = _boundedPosition(startMs);
+    final start = _boundedPosition(startMs);
+    final end = _boundedPosition(endMs);
+    if (start >= end) {
+      return;
+    }
+    final intent = ++_playbackIntent;
+    _selectionEndMs = end;
+    _selectionStopRequested = false;
     _schedule(() async {
-      await _driver.seek(position);
+      await _driver.seek(start);
+      if (_closed || intent != _playbackIntent) {
+        return;
+      }
       await _driver.play();
     });
   }
@@ -146,7 +168,16 @@ class MediaKitPreviewController extends PreviewController {
     if (_availability != PreviewAvailability.ready) {
       return;
     }
-    _schedule(() => _driver.seek(_boundedPosition(positionMs)));
+    final position = _boundedPosition(positionMs);
+    final intent = ++_playbackIntent;
+    _selectionEndMs = null;
+    _selectionStopRequested = false;
+    _schedule(() async {
+      if (_closed || intent != _playbackIntent) {
+        return;
+      }
+      await _driver.seek(position);
+    });
   }
 
   @override
@@ -193,6 +224,9 @@ class MediaKitPreviewController extends PreviewController {
   }
 
   void _setPlaying(bool playing) {
+    if (_selectionStopRequested && playing) {
+      return;
+    }
     if (_closed || _playing == playing) {
       return;
     }
@@ -201,12 +235,38 @@ class MediaKitPreviewController extends PreviewController {
   }
 
   void _setPosition(int positionMs) {
-    final position = _boundedPosition(positionMs);
-    if (_closed || _positionMs == position) {
+    if (_closed) {
       return;
     }
+    final bounded = _boundedPosition(positionMs);
+    final selectionEnd = _selectionEndMs;
+    final reachedSelectionEnd = selectionEnd != null && bounded >= selectionEnd;
+    final position = reachedSelectionEnd ? selectionEnd : bounded;
+    var changed = _positionMs != position;
     _positionMs = position;
-    notifyListeners();
+    if (reachedSelectionEnd && !_selectionStopRequested) {
+      _selectionStopRequested = true;
+      changed = changed || _playing;
+      _playing = false;
+      final intent = ++_playbackIntent;
+      _schedule(() async {
+        if (_closed || intent != _playbackIntent) {
+          return;
+        }
+        await _driver.pause();
+        if (_closed || intent != _playbackIntent) {
+          return;
+        }
+        await _driver.seek(selectionEnd);
+        if (intent == _playbackIntent) {
+          _selectionEndMs = null;
+          _selectionStopRequested = false;
+        }
+      });
+    }
+    if (changed) {
+      notifyListeners();
+    }
   }
 
   void _setDuration(int durationMs) {
@@ -234,6 +294,8 @@ class MediaKitPreviewController extends PreviewController {
     if (!completed || _closed || !_playing) {
       return;
     }
+    _selectionEndMs = null;
+    _selectionStopRequested = false;
     _playing = false;
     notifyListeners();
   }
@@ -244,12 +306,15 @@ class MediaKitPreviewController extends PreviewController {
     }
     _availability = PreviewAvailability.unavailable;
     _playing = false;
+    _selectionEndMs = null;
+    _selectionStopRequested = false;
     _diagnostic = diagnostic;
     notifyListeners();
   }
 
   Future<void> _close() async {
     _closed = true;
+    _playbackIntent += 1;
     try {
       await Future.wait<void>([
         _playingSubscription.cancel(),

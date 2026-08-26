@@ -4,6 +4,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import 'media_time.dart';
 import 'mf_tokens.dart';
 
 /// Marker controlled by keyboard or pointer input on [MfTimeline].
@@ -16,19 +17,6 @@ enum MfTimelineMarker {
 
   /// Current preview position.
   playhead,
-}
-
-/// Formats non-negative integer milliseconds for prototype presentation.
-String formatPrototypeTimestamp(int milliseconds) {
-  final bounded = math.max(0, milliseconds);
-  final hours = bounded ~/ 3600000;
-  final minutes = (bounded ~/ 60000) % 60;
-  final seconds = (bounded ~/ 1000) % 60;
-  final millis = bounded % 1000;
-  return '${hours.toString().padLeft(2, '0')}:'
-      '${minutes.toString().padLeft(2, '0')}:'
-      '${seconds.toString().padLeft(2, '0')}.'
-      '${millis.toString().padLeft(3, '0')}';
 }
 
 /// Accessible custom trim timeline with independent integer-ms markers.
@@ -96,11 +84,11 @@ class _MfTimelineState extends State<MfTimeline> {
         return Semantics(
           label: 'Trim timeline',
           value:
-              '${_markerLabel(_activeMarker)} ${formatPrototypeTimestamp(_activeValue)}. '
-              'Selection ${formatPrototypeTimestamp(widget.startMs)} to '
-              '${formatPrototypeTimestamp(widget.endMs)}.',
-          increasedValue: formatPrototypeTimestamp(_nextKeyboardValue(100)),
-          decreasedValue: formatPrototypeTimestamp(_nextKeyboardValue(-100)),
+              '${_markerLabel(_activeMarker)} ${_preciseTime(_activeValue)}. '
+              'Selection ${_preciseTime(widget.startMs)} to '
+              '${_preciseTime(widget.endMs)}.',
+          increasedValue: _preciseTime(_nextKeyboardValue(100)),
+          decreasedValue: _preciseTime(_nextKeyboardValue(-100)),
           onIncrease: () => _moveActiveMarker(100),
           onDecrease: () => _moveActiveMarker(-100),
           onTap: _focusNode.requestFocus,
@@ -173,9 +161,7 @@ class _MfTimelineState extends State<MfTimeline> {
                           constraints.maxWidth - 94,
                         ),
                         top: 0,
-                        child: _TimelineTooltip(
-                          label: formatPrototypeTimestamp(tooltipMs),
-                        ),
+                        child: _TimelineTooltip(label: _preciseTime(tooltipMs)),
                       ),
                   ],
                 ),
@@ -234,7 +220,7 @@ class _MfTimelineState extends State<MfTimeline> {
     final value = switch (_activeMarker) {
       MfTimelineMarker.start => end ? widget.endMs - 1 : 0,
       MfTimelineMarker.end => end ? widget.durationMs : widget.startMs + 1,
-      MfTimelineMarker.playhead => end ? widget.endMs : widget.startMs,
+      MfTimelineMarker.playhead => end ? widget.durationMs : 0,
     };
     _updateActiveMarker(value);
   }
@@ -259,7 +245,7 @@ class _MfTimelineState extends State<MfTimeline> {
         widget.startMs + 1,
         widget.durationMs,
       ),
-      MfTimelineMarker.playhead => valueMs.clamp(widget.startMs, widget.endMs),
+      MfTimelineMarker.playhead => valueMs.clamp(0, widget.durationMs),
     };
   }
 
@@ -297,6 +283,9 @@ class _MfTimelineState extends State<MfTimeline> {
     MfTimelineMarker.end => 'End handle',
     MfTimelineMarker.playhead => 'Playhead',
   };
+
+  String _preciseTime(int valueMs) =>
+      formatMediaTime(valueMs, includeMilliseconds: true);
 }
 
 class _TimelineTooltip extends StatelessWidget {
