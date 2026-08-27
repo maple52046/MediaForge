@@ -15,6 +15,7 @@ import 'prototype_controllers.dart';
 import 'prototype_screen.dart';
 import 'prototype_state.dart';
 import 'timeline_controller.dart';
+import 'window_close_coordinator.dart';
 
 /// Flutter composition root for native preview and backend-probed media state.
 class MediaForgePrototypeApp extends StatefulWidget {
@@ -27,6 +28,8 @@ class MediaForgePrototypeApp extends StatefulWidget {
     this.previewSource,
     this.mediaProbeService,
     this.conversionService,
+    this.conversionController,
+    this.windowClosePort,
     this.previewController,
     this.previewSurface,
     super.key,
@@ -37,6 +40,10 @@ class MediaForgePrototypeApp extends StatefulWidget {
        assert(
          conversionService == null || mediaProbeService != null,
          'Native conversion requires the matching media probe service.',
+       ),
+       assert(
+         conversionService == null || conversionController == null,
+         'Provide either a conversion service or a supplied controller.',
        );
 
   /// Prototype state shown for the current process.
@@ -60,6 +67,12 @@ class MediaForgePrototypeApp extends StatefulWidget {
   /// Optional native conversion boundary; omission retains fake progress.
   final ConversionService? conversionService;
 
+  /// Optional conversion state whose ownership transfers to this app root.
+  final ConversionController? conversionController;
+
+  /// Optional native window boundary for terminal-aware close coordination.
+  final WindowClosePort? windowClosePort;
+
   /// Optional preview state whose ownership transfers to this app root.
   final PreviewController? previewController;
 
@@ -80,6 +93,7 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
   late final TimelineController _timeline;
   late final ConversionController _conversion;
   late final SettingsPrototypeController _settings;
+  ConversionWindowCloseCoordinator? _windowCloseCoordinator;
 
   @override
   void initState() {
@@ -115,16 +129,27 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
       _nativePreviewSurface = null;
     }
     _timeline = TimelineController();
+    final suppliedConversion = widget.conversionController;
     final conversionService = widget.conversionService;
-    _conversion = conversionService == null
-        ? ConversionController.prototype(
-            initiallyConverting: widget.state == PrototypeState.converting,
-            autoAdvanceProgress: widget.autoAdvanceProgress,
-          )
-        : ConversionController(
-            service: conversionService,
-            outputPathService: probeService!,
-          );
+    _conversion =
+        suppliedConversion ??
+        (conversionService == null
+            ? ConversionController.prototype(
+                initiallyConverting: widget.state == PrototypeState.converting,
+                autoAdvanceProgress: widget.autoAdvanceProgress,
+              )
+            : ConversionController(
+                service: conversionService,
+                outputPathService: probeService!,
+              ));
+    final windowClosePort = widget.windowClosePort;
+    if (windowClosePort != null) {
+      _windowCloseCoordinator = ConversionWindowCloseCoordinator(
+        _conversion,
+        windowClosePort,
+      );
+      unawaited(_windowCloseCoordinator!.attach());
+    }
     _settings = SettingsPrototypeController(
       initiallyOpen: widget.showSettingsPopover,
     );
@@ -183,6 +208,10 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
     _mediaSession.removeListener(_handleMediaSessionChange);
     _preview.removeListener(_handlePreviewChange);
     _settings.dispose();
+    final windowCloseCoordinator = _windowCloseCoordinator;
+    if (windowCloseCoordinator != null) {
+      unawaited(windowCloseCoordinator.detach());
+    }
     _conversion.dispose();
     _timeline.dispose();
     _preview.dispose();

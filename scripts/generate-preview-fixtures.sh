@@ -17,14 +17,16 @@ generate_fixture() {
   local encoder="$1"
   local size="$2"
   local name="$3"
+  local duration="${4:-2}"
+  local rate="${5:-24}"
   ffmpeg \
     -hide_banner \
     -loglevel error \
     -f lavfi \
-    -i "testsrc=size=${size}:rate=24" \
+    -i "testsrc=size=${size}:rate=${rate}" \
     -f lavfi \
     -i "sine=frequency=1000:sample_rate=48000" \
-    -t 2 \
+    -t "${duration}" \
     -c:v "${encoder}" \
     -b:v 2M \
     -pix_fmt yuv420p \
@@ -40,3 +42,4 @@ generate_fixture() {
 generate_fixture libx264 320x180 preview-h264
 generate_fixture libx265 320x180 preview-hevc
 generate_fixture libx265 180x320 preview-portrait-hevc
+generate_fixture libx264 640x360 cancellation-h264 30 60

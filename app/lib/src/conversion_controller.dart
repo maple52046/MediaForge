@@ -8,7 +8,7 @@ import 'media_probe_service.dart';
 
 /// Owns output selection and one conversion lifecycle at the Flutter edge.
 class ConversionController extends ChangeNotifier {
-  /// Creates a backend-connected controller limited to the M7 primary recipe.
+  /// Creates a backend-connected controller limited to the primary recipe.
   ConversionController({
     required ConversionService service,
     required MediaProbeService outputPathService,
@@ -39,7 +39,10 @@ class ConversionController extends ChangeNotifier {
   }) : _supportedModes = List<MediaOutputMode>.unmodifiable(supportedModes),
        _availableModes = List<MediaOutputMode>.unmodifiable(supportedModes),
        _converting = initiallyConverting,
-       _progress = initiallyConverting ? 0.62 : 0 {
+       _progress = initiallyConverting ? 0.62 : 0,
+       _jobState = initiallyConverting
+           ? ConversionJobState.running
+           : ConversionJobState.idle {
     if (_service != null) {
       _eventSubscription = _service.jobEvents.listen(
         _handleEvent,
@@ -65,13 +68,21 @@ class ConversionController extends ChangeNotifier {
   MediaOutputMode _mode = MediaOutputMode.videoWithAudio;
   bool _converting;
   double _progress;
+  ConversionJobState _jobState;
+  bool _cancelling = false;
+  int _processedMs = 0;
+  int _totalMs = 0;
+  double? _framesPerSecond;
+  double? _speed;
   String? _outputPath;
   String? _completedOutputPath;
   ConversionFailure? _failure;
   int? _activeJobId;
   int _destinationGeneration = 0;
   final List<ConversionJobEvent> _earlyEvents = <ConversionJobEvent>[];
+  Completer<void>? _terminalCompleter;
   bool _closed = false;
+  bool _disposed = false;
   Future<void>? _closeFuture;
 
   /// Selected output recipe.
@@ -85,6 +96,24 @@ class ConversionController extends ChangeNotifier {
 
   /// Presentation progress from zero through one.
   double get progress => _progress;
+
+  /// Current application-owned job lifecycle state.
+  ConversionJobState get jobState => _jobState;
+
+  /// Whether a native cancellation request is awaiting a terminal event.
+  bool get cancelling => _cancelling;
+
+  /// Trim-relative processed time from the latest progress sample.
+  int get processedMs => _processedMs;
+
+  /// Selected duration from the latest progress sample or start request.
+  int get totalMs => _totalMs;
+
+  /// Current processing frame rate when the backend reports it.
+  double? get framesPerSecond => _framesPerSecond;
+
+  /// Current processing speed relative to realtime when reported.
+  double? get speed => _speed;
 
   /// Backend-proposed destination for the current source and mode.
   String? get outputPath => _outputPath;
@@ -102,7 +131,7 @@ class ConversionController extends ChangeNotifier {
       (_service == null || (_media != null && _outputPath != null));
 
   /// Whether the current implementation exposes cancellation.
-  bool get canCancel => _service == null && _converting;
+  bool get canCancel => _converting && !_cancelling;
 
   /// Applies Rust-authoritative source modes and resolves its default output.
   void setMedia(MediaMetadata media) {
@@ -110,6 +139,13 @@ class ConversionController extends ChangeNotifier {
       return;
     }
     _media = media;
+    _jobState = ConversionJobState.idle;
+    _cancelling = false;
+    _progress = 0;
+    _processedMs = 0;
+    _totalMs = 0;
+    _framesPerSecond = null;
+    _speed = null;
     _completedOutputPath = null;
     _failure = null;
     _applyAvailableModes(media.availableOutputModes);
@@ -118,18 +154,19 @@ class ConversionController extends ChangeNotifier {
       _outputPath = null;
       _failure = const ConversionFailure(
         code: ConversionErrorCode.unsupportedInput,
-        diagnostic: 'The M7 workflow requires both video and audio streams.',
+        diagnostic:
+            'The primary workflow requires both video and audio streams.',
       );
-      notifyListeners();
+      _notifyListeners();
       return;
     }
     if (_service == null) {
       _outputPath = _prototypeOutputPath(media, _mode);
-      notifyListeners();
+      _notifyListeners();
       return;
     }
     _outputPath = null;
-    notifyListeners();
+    _notifyListeners();
     if (_availableModes.isNotEmpty) {
       unawaited(_resolveOutputPath(media, _mode, generation));
     }
@@ -149,11 +186,11 @@ class ConversionController extends ChangeNotifier {
       if (media != null) {
         _outputPath = _prototypeOutputPath(media, mode);
       }
-      notifyListeners();
+      _notifyListeners();
       return;
     }
     _outputPath = null;
-    notifyListeners();
+    _notifyListeners();
     unawaited(_resolveOutputPath(media, mode, generation));
   }
 
@@ -163,7 +200,7 @@ class ConversionController extends ChangeNotifier {
       throw StateError('Backend-connected modes must come from setMedia.');
     }
     _applyAvailableModes(modes);
-    notifyListeners();
+    _notifyListeners();
   }
 
   /// Starts the selected trim through the configured service or fake timer.
@@ -174,9 +211,11 @@ class ConversionController extends ChangeNotifier {
     final service = _service;
     if (service == null) {
       _converting = true;
+      _jobState = ConversionJobState.running;
+      _cancelling = false;
       _progress = 0.08;
       _startProgressTimer();
-      notifyListeners();
+      _notifyListeners();
       return;
     }
     final media = _media;
@@ -189,17 +228,24 @@ class ConversionController extends ChangeNotifier {
         code: ConversionErrorCode.invalidTrimRange,
         diagnostic: 'A probed source and trim range are required.',
       );
-      notifyListeners();
+      _notifyListeners();
       return;
     }
 
     _converting = true;
-    _progress = 0.08;
+    _jobState = ConversionJobState.preparing;
+    _cancelling = false;
+    _progress = 0;
+    _processedMs = 0;
+    _totalMs = endMs - startMs;
+    _framesPerSecond = null;
+    _speed = null;
     _failure = null;
     _completedOutputPath = null;
     _activeJobId = null;
     _earlyEvents.clear();
-    notifyListeners();
+    _terminalCompleter = Completer<void>();
+    _notifyListeners();
     try {
       final snapshot = await service.start(
         ConversionRequest(
@@ -221,6 +267,9 @@ class ConversionController extends ChangeNotifier {
       for (final event in earlyEvents) {
         _handleEvent(event);
       }
+      if (_cancelling && _converting) {
+        await _requestNativeCancellation(snapshot.jobId);
+      }
     } on ConversionFailure catch (failure) {
       _finishWithFailure(failure);
     } on Object catch (error) {
@@ -233,16 +282,39 @@ class ConversionController extends ChangeNotifier {
     }
   }
 
-  /// Cancels deterministic fake conversion; native cancellation starts in M8.
-  void cancel() {
+  /// Requests cancellation without unlocking until a terminal event arrives.
+  Future<void> cancel() async {
     if (!canCancel) {
       return;
     }
-    _progressTimer?.cancel();
-    _progressTimer = null;
-    _converting = false;
-    _progress = 0;
-    notifyListeners();
+    final service = _service;
+    if (service == null) {
+      _progressTimer?.cancel();
+      _progressTimer = null;
+      _converting = false;
+      _jobState = ConversionJobState.cancelled;
+      _progress = 0;
+      _notifyListeners();
+      return;
+    }
+    _cancelling = true;
+    _notifyListeners();
+    final activeJobId = _activeJobId;
+    if (activeJobId != null) {
+      await _requestNativeCancellation(activeJobId);
+    }
+  }
+
+  /// Requests cancellation and waits until backend cleanup reaches a terminal event.
+  Future<void> cancelAndWaitForTerminal() async {
+    if (!_converting) {
+      return;
+    }
+    final terminal = _terminalCompleter?.future;
+    await cancel();
+    if (terminal != null) {
+      await terminal;
+    }
   }
 
   /// Cancels the event subscription once and awaits stream cleanup.
@@ -272,13 +344,13 @@ class ConversionController extends ChangeNotifier {
         return;
       }
       _outputPath = outputPath;
-      notifyListeners();
+      _notifyListeners();
     } on MediaProbeFailure catch (failure) {
       if (_closed || generation != _destinationGeneration) {
         return;
       }
       _failure = _fromProbeFailure(failure);
-      notifyListeners();
+      _notifyListeners();
     } on Object catch (error) {
       if (_closed || generation != _destinationGeneration) {
         return;
@@ -287,7 +359,7 @@ class ConversionController extends ChangeNotifier {
         code: ConversionErrorCode.unexpected,
         diagnostic: error.toString(),
       );
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -305,7 +377,10 @@ class ConversionController extends ChangeNotifier {
     }
     switch (event.kind) {
       case ConversionJobEventKind.preparing:
+        _jobState = ConversionJobState.preparing;
+        return;
       case ConversionJobEventKind.progress:
+        _handleProgress(event);
         return;
       case ConversionJobEventKind.completed:
         final outputPath = event.outputPath;
@@ -319,19 +394,23 @@ class ConversionController extends ChangeNotifier {
           return;
         }
         _converting = false;
+        _jobState = ConversionJobState.completed;
+        _cancelling = false;
         _progress = 1;
+        _processedMs = _totalMs;
         _completedOutputPath = outputPath;
         _activeJobId = null;
-        notifyListeners();
+        _completeTerminal();
+        _notifyListeners();
       case ConversionJobEventKind.cancelled:
         _converting = false;
+        _jobState = ConversionJobState.cancelled;
+        _cancelling = false;
         _progress = 0;
-        _failure = const ConversionFailure(
-          code: ConversionErrorCode.cancelled,
-          diagnostic: 'Conversion was cancelled.',
-        );
+        _failure = null;
         _activeJobId = null;
-        notifyListeners();
+        _completeTerminal();
+        _notifyListeners();
       case ConversionJobEventKind.failed:
         _finishWithFailure(
           event.failure ??
@@ -340,6 +419,59 @@ class ConversionController extends ChangeNotifier {
                 diagnostic: 'Failed conversion did not include a cause.',
               ),
         );
+    }
+  }
+
+  void _handleProgress(ConversionJobEvent event) {
+    final percent = event.percent;
+    final processedMs = event.processedMs;
+    final totalMs = event.totalMs;
+    if (percent == null ||
+        processedMs == null ||
+        totalMs == null ||
+        totalMs <= 0) {
+      _finishWithFailure(
+        const ConversionFailure(
+          code: ConversionErrorCode.unexpected,
+          diagnostic: 'Progress event did not include a valid sample.',
+        ),
+      );
+      return;
+    }
+    final normalized = (percent / 100).clamp(0.0, 1.0).toDouble();
+    if (normalized > _progress) {
+      _progress = normalized;
+    }
+    if (processedMs > _processedMs) {
+      _processedMs = processedMs.clamp(0, totalMs).toInt();
+    }
+    _totalMs = totalMs;
+    _framesPerSecond = event.framesPerSecond;
+    _speed = event.speed;
+    _jobState = ConversionJobState.running;
+    _notifyListeners();
+  }
+
+  Future<void> _requestNativeCancellation(int jobId) async {
+    try {
+      await _service!.cancel(jobId);
+    } on ConversionFailure catch (failure) {
+      if (_cancelling && failure.code == ConversionErrorCode.jobNotFound) {
+        // Rationale: backend cleanup may become terminal immediately before cancellation locks it.
+        return;
+      }
+      if (_converting && _activeJobId == jobId) {
+        _finishWithFailure(failure);
+      }
+    } on Object catch (error) {
+      if (_converting && _activeJobId == jobId) {
+        _finishWithFailure(
+          ConversionFailure(
+            code: ConversionErrorCode.unexpected,
+            diagnostic: error.toString(),
+          ),
+        );
+      }
     }
   }
 
@@ -360,11 +492,21 @@ class ConversionController extends ChangeNotifier {
       return;
     }
     _converting = false;
+    _jobState = ConversionJobState.failed;
+    _cancelling = false;
     _progress = 0;
     _failure = failure;
     _activeJobId = null;
     _earlyEvents.clear();
-    notifyListeners();
+    _completeTerminal();
+    _notifyListeners();
+  }
+
+  void _completeTerminal() {
+    final terminal = _terminalCompleter;
+    if (terminal != null && !terminal.isCompleted) {
+      terminal.complete();
+    }
   }
 
   void _startProgressTimer() {
@@ -384,7 +526,7 @@ class ConversionController extends ChangeNotifier {
         timer.cancel();
         _progressTimer = null;
       }
-      notifyListeners();
+      _notifyListeners();
     });
   }
 
@@ -425,15 +567,23 @@ class ConversionController extends ChangeNotifier {
   }
 
   Future<void> _close() async {
+    await cancelAndWaitForTerminal();
     _closed = true;
     _destinationGeneration += 1;
     _progressTimer?.cancel();
     await _eventSubscription?.cancel();
   }
 
+  void _notifyListeners() {
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
-    // Constraint: ChangeNotifier disposal cannot await the tracked stream cleanup.
+    // Constraint: synchronous disposal cannot await backend terminal cleanup.
+    _disposed = true;
     unawaited(close());
     super.dispose();
   }

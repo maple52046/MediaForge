@@ -243,6 +243,65 @@ void main() {
     }
   });
 
+  testWidgets(
+    'macOS runner cancels Rust conversion and removes partial output',
+    (WidgetTester tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1200, 780);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final temporaryDirectory = await Directory.systemTemp.createTemp(
+        'mediaforge-m8-',
+      );
+      final input = File('${temporaryDirectory.path}/cancellation.mov');
+      final output = File('${temporaryDirectory.path}/cancellation.mp4');
+      await _bundledFixture('cancellation-h264.mp4').copy(input.path);
+
+      try {
+        await tester.pumpWidget(
+          MediaForgePrototypeApp(
+            state: PrototypeState.empty,
+            previewSource: input.path,
+            mediaProbeService: const RustMediaProbeService(),
+            conversionService: const RustConversionService(),
+          ),
+        );
+        await _waitForNativeState(
+          tester,
+          () => find.byKey(const Key('start-conversion')).evaluate().isNotEmpty,
+        );
+
+        await tester.tap(find.byKey(const Key('start-conversion')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('cancel-conversion')));
+        await _waitForNativeState(
+          tester,
+          () => find
+              .byKey(const Key('conversion-cancelled'))
+              .evaluate()
+              .isNotEmpty,
+          timeout: const Duration(seconds: 20),
+        );
+
+        expect(await output.exists(), isFalse);
+        final partials = await temporaryDirectory
+            .list()
+            .where(
+              (FileSystemEntity entity) => entity.path.contains('.mediaforge-'),
+            )
+            .toList();
+        expect(partials, isEmpty);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        if (await temporaryDirectory.exists()) {
+          await temporaryDirectory.delete(recursive: true);
+        }
+      }
+    },
+  );
+
   testWidgets('macOS desktop opens and closes settings', (
     WidgetTester tester,
   ) async {

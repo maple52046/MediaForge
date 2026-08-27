@@ -8,6 +8,7 @@ import 'src/media_probe_service.dart';
 import 'src/mediaforge_app.dart';
 import 'src/mf_tokens.dart';
 import 'src/prototype_state.dart';
+import 'src/window_close_coordinator.dart';
 
 /// Starts the interactive MediaForge desktop prototype.
 Future<void> main() async {
@@ -59,6 +60,7 @@ Future<void> main() async {
       previewSource: previewSource.isEmpty ? null : previewSource,
       mediaProbeService: const RustMediaProbeService(),
       conversionService: const RustConversionService(),
+      windowClosePort: WindowManagerClosePort(),
     ),
   );
   await windowReady;

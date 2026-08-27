@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1363898566;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 688988532;
 
 // Section: executor
 
@@ -77,6 +77,39 @@ fn wire__crate__api__handshake__bridge_event_stream_impl(
             move |context| {
                 transform_result_sse::<_, crate::api::handshake::BridgeError>((move || {
                     let output_ok = crate::api::handshake::bridge_event_stream(api_seed, api_sink)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__media__cancel_transcode_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "cancel_transcode",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_job_id = <u64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::media::MediaBridgeError>((move || {
+                    let output_ok = crate::api::media::cancel_transcode(api_job_id)?;
                     Ok(output_ok)
                 })())
             }
@@ -863,13 +896,14 @@ fn pde_ffi_dispatcher_primary_impl(
         1 => {
             wire__crate__api__handshake__bridge_event_stream_impl(port, ptr, rust_vec_len, data_len)
         }
-        2 => wire__crate__api__media__default_output_path_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__media__initialize_backend_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__handshake__initialize_bridge_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__media__job_events_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__handshake__negotiate_bridge_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__media__probe_media_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__media__start_transcode_impl(port, ptr, rust_vec_len, data_len),
+        2 => wire__crate__api__media__cancel_transcode_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__media__default_output_path_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__media__initialize_backend_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__handshake__initialize_bridge_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__media__job_events_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__handshake__negotiate_bridge_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__media__probe_media_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__media__start_transcode_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

@@ -9,7 +9,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 import '../frb_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `build_transcode_request`, `canonicalize_output_path`, `canonicalize_path`, `is_terminal`, `job_event_id`, `media_runtime`, `path_to_string`, `subscribe`
+// These functions are ignored because they are not marked as `pub`: `active_job_id`, `build_transcode_request`, `canonicalize_output_path`, `canonicalize_path`, `is_terminal`, `job_event_id`, `media_runtime`, `path_to_string`, `subscribe`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `BridgeJobEventSink`, `EventDelivery`, `MediaRuntime`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `emit`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`, `default`
@@ -57,6 +57,17 @@ Future<JobSnapshotDto> startTranscode({
 }) => MediaForgeRustLib.instance.api.crateApiMediaStartTranscode(
   request: request,
 );
+
+/// Requests cooperative cancellation for the matching active conversion.
+///
+/// Completion is reported only through [`job_events`] after backend cleanup.
+///
+/// # Errors
+///
+/// Returns [`MediaBridgeErrorCode::JobNotFound`] when the identifier is stale,
+/// mismatched, or already terminal.
+Future<void> cancelTranscode({required int jobId}) =>
+    MediaForgeRustLib.instance.api.crateApiMediaCancelTranscode(jobId: jobId);
 
 /// Registers the process's current Flutter subscriber for application events.
 ///

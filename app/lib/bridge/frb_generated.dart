@@ -76,7 +76,7 @@ class MediaForgeRustLib
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1363898566;
+  int get rustContentHash => 688988532;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -89,6 +89,8 @@ class MediaForgeRustLib
 
 abstract class MediaForgeRustLibApi extends BaseApi {
   Stream<BridgeEvent> crateApiHandshakeBridgeEventStream({required int seed});
+
+  Future<void> crateApiMediaCancelTranscode({required int jobId});
 
   Future<String> crateApiMediaDefaultOutputPath({
     required String path,
@@ -158,6 +160,34 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
       );
 
   @override
+  Future<void> crateApiMediaCancelTranscode({required int jobId}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_CastedPrimitive_u_64(jobId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_media_bridge_error,
+        ),
+        constMeta: kCrateApiMediaCancelTranscodeConstMeta,
+        argValues: [jobId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMediaCancelTranscodeConstMeta =>
+      const TaskConstMeta(debugName: 'cancel_transcode', argNames: ['jobId']);
+
+  @override
   Future<String> crateApiMediaDefaultOutputPath({
     required String path,
     required MediaOutputMode mode,
@@ -171,7 +201,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 3,
             port: port_,
           );
         },
@@ -201,7 +231,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 4,
             port: port_,
           );
         },
@@ -228,7 +258,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 5,
             port: port_,
           );
         },
@@ -258,7 +288,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 5,
+              funcId: 6,
               port: port_,
             );
           },
@@ -290,7 +320,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 7,
             port: port_,
           );
         },
@@ -318,7 +348,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 8,
             port: port_,
           );
         },
@@ -351,7 +381,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 9,
             port: port_,
           );
         },

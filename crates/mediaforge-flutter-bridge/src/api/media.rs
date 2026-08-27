@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use flutter_rust_bridge::frb;
 use mediaforge_application::{
-    ApplicationError, ErrorCode, JobCoordinator, JobEvent, JobEventSink, JobSnapshot, JobState,
-    MediaFacade,
+    ApplicationError, ErrorCode, JobCoordinator, JobEvent, JobEventSink, JobId, JobSnapshot,
+    JobState, MediaFacade,
 };
 use mediaforge_core::{
     propose_output_path, AudioQuality, AudioStreamInfo, BackendCapabilities, MediaBackend,
@@ -289,6 +289,23 @@ pub fn start_transcode(
     JobSnapshotDto::try_from(runtime.coordinator.start(request)?)
 }
 
+/// Requests cooperative cancellation for the matching active conversion.
+///
+/// Completion is reported only through [`job_events`] after backend cleanup.
+///
+/// # Errors
+///
+/// Returns [`MediaBridgeErrorCode::JobNotFound`] when the identifier is stale,
+/// mismatched, or already terminal.
+pub fn cancel_transcode(job_id: u64) -> Result<(), MediaBridgeError> {
+    let runtime = media_runtime()?;
+    let id = active_job_id(runtime.coordinator.current()?, job_id)?;
+    runtime
+        .coordinator
+        .cancel(id)
+        .map_err(MediaBridgeError::from)
+}
+
 /// Registers the process's current Flutter subscriber for application events.
 ///
 /// The stream remains open for the process lifetime. Re-registering replaces a
@@ -418,6 +435,16 @@ fn job_event_id(event: &JobEvent) -> u64 {
         | JobEvent::Cancelled { id }
         | JobEvent::Failed { id, .. } => id.value(),
     }
+}
+
+fn active_job_id(
+    snapshot: Option<JobSnapshot>,
+    requested_job_id: u64,
+) -> Result<JobId, MediaBridgeError> {
+    snapshot
+        .filter(|snapshot| snapshot.id.value() == requested_job_id)
+        .map(|snapshot| snapshot.id)
+        .ok_or_else(|| MediaBridgeError::from(ApplicationError::from(MediaError::JobNotFound)))
 }
 
 fn build_transcode_request(
@@ -766,6 +793,13 @@ mod tests {
         let error = canonicalize_path(PathBuf::new()).expect_err("an empty path must fail");
 
         assert_eq!(error.code, MediaBridgeErrorCode::CannotOpenInput);
+    }
+
+    #[test]
+    fn cancellation_requires_the_current_application_job() {
+        let error = active_job_id(None, 7).expect_err("a stale identifier must fail");
+
+        assert_eq!(error.code, MediaBridgeErrorCode::JobNotFound);
     }
 
     #[test]

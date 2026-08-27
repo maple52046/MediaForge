@@ -2,6 +2,7 @@
 
 use std::path::Path;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mediaforge_core::{
@@ -23,6 +24,23 @@ struct AlwaysCancelled;
 impl Cancellation for AlwaysCancelled {
     fn is_cancelled(&self) -> bool {
         true
+    }
+}
+
+#[derive(Default)]
+struct CancelAfterProgress {
+    requested: AtomicBool,
+}
+
+impl Cancellation for CancelAfterProgress {
+    fn is_cancelled(&self) -> bool {
+        self.requested.load(Ordering::Acquire)
+    }
+}
+
+impl ProgressObserver for CancelAfterProgress {
+    fn on_progress(&self, _update: ProgressUpdate) {
+        self.requested.store(true, Ordering::Release);
     }
 }
 
@@ -102,6 +120,81 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
         .filter(|entry| entry.file_name().to_string_lossy().contains(".part."))
         .count();
     assert_eq!(partial_count, 0);
+}
+
+#[test]
+#[ignore = "requires MEDIAFORGE_REAL_MEDIA and macOS VideoToolbox"]
+fn validates_representative_user_media_without_mutating_the_source() {
+    let Some(source) = std::env::var_os("MEDIAFORGE_REAL_MEDIA").map(std::path::PathBuf::from)
+    else {
+        eprintln!("MEDIAFORGE_REAL_MEDIA is unset; representative media gate skipped");
+        return;
+    };
+    let original_size = std::fs::metadata(&source)
+        .expect("representative source must be readable")
+        .len();
+    let backend = FfmpegBackend::new().expect("FFmpeg must initialize");
+    let source_info = backend.probe(&source).expect("source must be probed");
+    assert!(
+        source_info
+            .available_output_modes()
+            .contains(&OutputMode::VideoWithAudio),
+        "representative source must contain primary video and audio streams"
+    );
+    let trim_end = source_info.duration_ms.min(3_000);
+    let trim = TrimRange::new(0, trim_end, source_info.duration_ms)
+        .expect("representative source must contain a non-empty selection");
+    let workspace = tempfile::tempdir().expect("test workspace must be created");
+    let output = workspace.path().join("representative.mp4");
+
+    backend
+        .transcode(
+            &TranscodeRequest {
+                input_path: source.clone(),
+                output_path: output.clone(),
+                mode: OutputMode::VideoWithAudio,
+                trim,
+                audio_quality: AudioQuality::Medium,
+                overwrite: false,
+            },
+            &RecordedProgress::default(),
+            Arc::new(NeverCancelled),
+        )
+        .expect("representative source must transcode through the library backend");
+    let output_info = backend.probe(&output).expect("output must be probed");
+    assert!(output_info.video.is_some());
+    assert!(output_info.audio.is_some());
+
+    let cancelled_output = workspace.path().join("representative-cancelled.mp4");
+    let cancellation = Arc::new(CancelAfterProgress::default());
+    let result = backend.transcode(
+        &TranscodeRequest {
+            input_path: source.clone(),
+            output_path: cancelled_output.clone(),
+            mode: OutputMode::VideoWithAudio,
+            trim,
+            audio_quality: AudioQuality::Medium,
+            overwrite: false,
+        },
+        cancellation.as_ref(),
+        cancellation.clone(),
+    );
+    assert!(matches!(result, Err(MediaError::Cancelled)));
+    assert!(!cancelled_output.exists());
+    assert_eq!(
+        std::fs::metadata(&source)
+            .expect("representative source must remain readable")
+            .len(),
+        original_size
+    );
+    assert_eq!(
+        std::fs::read_dir(workspace.path())
+            .expect("test workspace must remain readable")
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().contains(".part."))
+            .count(),
+        0
+    );
 }
 
 fn generate_fixture(path: &Path) {

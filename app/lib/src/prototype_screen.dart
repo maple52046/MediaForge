@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'conversion_controller.dart';
+import 'conversion_service.dart';
 import 'media_metadata.dart';
 import 'media_session_controller.dart';
 import 'media_time.dart';
@@ -1311,6 +1312,13 @@ class _ReadyContent extends StatelessWidget {
             key: Key('conversion-completed'),
             style: TextStyle(color: MfPalette.accentBright, fontSize: 10),
           ),
+        ] else if (conversion.jobState == ConversionJobState.cancelled) ...[
+          const SizedBox(height: MfSpacing.xs),
+          const Text(
+            'Conversion cancelled',
+            key: Key('conversion-cancelled'),
+            style: TextStyle(color: MfPalette.muted, fontSize: 10),
+          ),
         ],
         const Spacer(),
         Row(
@@ -1360,8 +1368,18 @@ class _ConvertingContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final percent = (conversion.progress * 100).round();
-    final processedMs = (timeline.selectedDurationMs * conversion.progress)
-        .round();
+    final hasBackendSample = conversion.totalMs > 0;
+    final totalMs = hasBackendSample
+        ? conversion.totalMs
+        : timeline.selectedDurationMs;
+    final processedMs = hasBackendSample
+        ? conversion.processedMs
+        : (totalMs * conversion.progress).round();
+    final telemetry = <String>[
+      if (conversion.framesPerSecond case final framesPerSecond?)
+        '${framesPerSecond.toStringAsFixed(1)} fps',
+      if (conversion.speed case final speed?) '${speed.toStringAsFixed(1)}×',
+    ].join('  ·  ');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1378,9 +1396,10 @@ class _ConvertingContent extends StatelessWidget {
         const SizedBox(height: MfSpacing.xl),
         Row(
           children: [
-            const Text(
-              'Encoding video',
-              style: TextStyle(
+            Text(
+              conversion.cancelling ? 'Cancelling' : 'Encoding video',
+              key: const Key('conversion-stage'),
+              style: const TextStyle(
                 color: MfPalette.foreground,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -1403,15 +1422,26 @@ class _ConvertingContent extends StatelessWidget {
         const SizedBox(height: MfSpacing.sm),
         Row(
           children: [
-            Text(
-              '${(processedMs / 1000).toStringAsFixed(3)} / '
-              '${(timeline.selectedDurationMs / 1000).toStringAsFixed(3)} sec',
-              style: const TextStyle(color: MfPalette.muted, fontSize: 10),
+            Expanded(
+              child: Text(
+                '${(processedMs / 1000).toStringAsFixed(3)} / '
+                '${(totalMs / 1000).toStringAsFixed(3)} sec',
+                key: const Key('progress-time'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: MfPalette.muted, fontSize: 10),
+              ),
             ),
-            const Spacer(),
-            const Text(
-              '58 fps  ·  2.4×',
-              style: TextStyle(color: MfPalette.muted, fontSize: 10),
+            const SizedBox(width: MfSpacing.sm),
+            Expanded(
+              child: Text(
+                telemetry.isEmpty ? '—' : telemetry,
+                key: const Key('progress-telemetry'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: const TextStyle(color: MfPalette.muted, fontSize: 10),
+              ),
             ),
           ],
         ),
@@ -1431,8 +1461,14 @@ class _ConvertingContent extends StatelessWidget {
           key: const Key('cancel-conversion'),
           width: double.infinity,
           height: 40,
-          onPressed: conversion.canCancel ? conversion.cancel : null,
-          child: const Text('Cancel conversion'),
+          onPressed: conversion.canCancel
+              ? () async {
+                  await conversion.cancel();
+                }
+              : null,
+          child: Text(
+            conversion.cancelling ? 'Cancelling…' : 'Cancel conversion',
+          ),
         ),
       ],
     );

@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mediaforge/src/conversion_controller.dart';
 import 'package:mediaforge/src/conversion_service.dart';
 import 'package:mediaforge/src/media_metadata.dart';
 import 'package:mediaforge/src/media_probe_service.dart';
+import 'package:mediaforge/src/window_close_coordinator.dart';
 
 void main() {
   test('functional controller enables only primary Video + Audio', () async {
@@ -152,6 +154,239 @@ void main() {
     expect(controller.failure?.code, ConversionErrorCode.unsupportedInput);
     expect(conversionService.requests, isEmpty);
   });
+
+  test('progress remains monotonic and preserves backend telemetry', () async {
+    final conversionService = _FakeConversionService();
+    final controller = ConversionController(
+      service: conversionService,
+      outputPathService: _FakeProbeService('/tmp/source.mp4'),
+    );
+    addTearDown(() async {
+      await controller.close();
+      controller.dispose();
+      await conversionService.close();
+    });
+    controller.setMedia(_media());
+    await _drainEvents();
+    await controller.start(startMs: 200, endMs: 1200);
+
+    conversionService.emit(
+      const ConversionJobEvent(
+        kind: ConversionJobEventKind.progress,
+        jobId: 7,
+        percent: 40,
+        processedMs: 400,
+        totalMs: 1000,
+        framesPerSecond: 58.25,
+        speed: 2.4,
+      ),
+    );
+    conversionService.emit(
+      const ConversionJobEvent(
+        kind: ConversionJobEventKind.progress,
+        jobId: 7,
+        percent: 30,
+        processedMs: 300,
+        totalMs: 1000,
+        framesPerSecond: 57,
+        speed: 2.2,
+      ),
+    );
+    await _drainEvents();
+
+    expect(controller.progress, 0.4);
+    expect(controller.processedMs, 400);
+    expect(controller.totalMs, 1000);
+    expect(controller.framesPerSecond, 57);
+    expect(controller.speed, 2.2);
+    expect(controller.jobState, ConversionJobState.running);
+
+    conversionService.emit(
+      const ConversionJobEvent(
+        kind: ConversionJobEventKind.completed,
+        jobId: 7,
+        outputPath: '/tmp/source.mp4',
+      ),
+    );
+    await _drainEvents();
+  });
+
+  test(
+    'early cancellation waits for job identity and terminal cleanup',
+    () async {
+      final conversionService = _FakeConversionService(delayStart: true);
+      final controller = ConversionController(
+        service: conversionService,
+        outputPathService: _FakeProbeService('/tmp/source.mp4'),
+      );
+      addTearDown(() async {
+        await controller.close();
+        controller.dispose();
+        await conversionService.close();
+      });
+      controller.setMedia(_media());
+      await _drainEvents();
+
+      final start = controller.start(startMs: 0, endMs: 2000);
+      await _drainEvents();
+      final cancelled = controller.cancelAndWaitForTerminal();
+      expect(controller.cancelling, isTrue);
+      expect(conversionService.cancelledJobIds, isEmpty);
+
+      conversionService.completeStart();
+      await start;
+      expect(conversionService.cancelledJobIds, <int>[7]);
+      var reachedTerminal = false;
+      unawaited(cancelled.then((_) => reachedTerminal = true));
+      await _drainEvents();
+      expect(reachedTerminal, isFalse);
+
+      conversionService.emit(
+        const ConversionJobEvent(
+          kind: ConversionJobEventKind.cancelled,
+          jobId: 7,
+        ),
+      );
+      await cancelled;
+      expect(controller.converting, isFalse);
+      expect(controller.jobState, ConversionJobState.cancelled);
+      expect(controller.failure, isNull);
+    },
+  );
+
+  test('repeated cancellation sends one native request', () async {
+    final conversionService = _FakeConversionService();
+    final controller = ConversionController(
+      service: conversionService,
+      outputPathService: _FakeProbeService('/tmp/source.mp4'),
+    );
+    addTearDown(() async {
+      await controller.close();
+      controller.dispose();
+      await conversionService.close();
+    });
+    controller.setMedia(_media());
+    await _drainEvents();
+    await controller.start(startMs: 0, endMs: 2000);
+
+    await controller.cancel();
+    await controller.cancel();
+    expect(conversionService.cancelledJobIds, <int>[7]);
+
+    conversionService.emit(
+      const ConversionJobEvent(
+        kind: ConversionJobEventKind.cancelled,
+        jobId: 7,
+      ),
+    );
+    await _drainEvents();
+  });
+
+  test(
+    'terminal race waits for the matching event after job not found',
+    () async {
+      final conversionService = _FakeConversionService(
+        cancelFailure: const ConversionFailure(
+          code: ConversionErrorCode.jobNotFound,
+          diagnostic: 'job became terminal before cancellation acquired it',
+        ),
+      );
+      final controller = ConversionController(
+        service: conversionService,
+        outputPathService: _FakeProbeService('/tmp/source.mp4'),
+      );
+      addTearDown(() async {
+        await controller.close();
+        controller.dispose();
+        await conversionService.close();
+      });
+      controller.setMedia(_media());
+      await _drainEvents();
+      await controller.start(startMs: 0, endMs: 2000);
+
+      final cancelled = controller.cancelAndWaitForTerminal();
+      await _drainEvents();
+      expect(controller.converting, isTrue);
+      expect(controller.failure, isNull);
+
+      conversionService.emit(
+        const ConversionJobEvent(
+          kind: ConversionJobEventKind.completed,
+          jobId: 7,
+          outputPath: '/tmp/source.mp4',
+        ),
+      );
+      await cancelled;
+      expect(controller.jobState, ConversionJobState.completed);
+    },
+  );
+
+  test(
+    'window close destroys only after cancellation becomes terminal',
+    () async {
+      final conversionService = _FakeConversionService();
+      final controller = ConversionController(
+        service: conversionService,
+        outputPathService: _FakeProbeService('/tmp/source.mp4'),
+      );
+      final window = _FakeWindowClosePort();
+      final coordinator = ConversionWindowCloseCoordinator(controller, window);
+      addTearDown(() async {
+        await controller.close();
+        controller.dispose();
+        await conversionService.close();
+      });
+      controller.setMedia(_media());
+      await _drainEvents();
+      await controller.start(startMs: 0, endMs: 2000);
+      await coordinator.attach();
+
+      final close = coordinator.requestClose();
+      await _drainEvents();
+      expect(conversionService.cancelledJobIds, <int>[7]);
+      expect(window.destroyCount, 0);
+
+      conversionService.emit(
+        const ConversionJobEvent(
+          kind: ConversionJobEventKind.cancelled,
+          jobId: 7,
+        ),
+      );
+      await close;
+      expect(window.destroyCount, 1);
+      expect(window.onClose, isNull);
+      await coordinator.requestClose();
+      expect(window.destroyCount, 1);
+    },
+  );
+
+  test(
+    'dispose suppresses notifications while native cleanup finishes',
+    () async {
+      final conversionService = _FakeConversionService();
+      final controller = ConversionController(
+        service: conversionService,
+        outputPathService: _FakeProbeService('/tmp/source.mp4'),
+      );
+      controller.setMedia(_media());
+      await _drainEvents();
+      await controller.start(startMs: 0, endMs: 2000);
+
+      controller.dispose();
+      await _drainEvents();
+      expect(conversionService.cancelledJobIds, <int>[7]);
+
+      conversionService.emit(
+        const ConversionJobEvent(
+          kind: ConversionJobEventKind.cancelled,
+          jobId: 7,
+        ),
+      );
+      await _drainEvents();
+      await controller.close();
+      await conversionService.close();
+    },
+  );
 }
 
 Future<void> _drainEvents() => Future<void>.delayed(Duration.zero);
@@ -186,12 +421,14 @@ MediaMetadata _media() {
 }
 
 class _FakeConversionService implements ConversionService {
-  _FakeConversionService({this.delayStart = false});
+  _FakeConversionService({this.delayStart = false, this.cancelFailure});
 
   final bool delayStart;
+  final ConversionFailure? cancelFailure;
   final StreamController<ConversionJobEvent> _events =
       StreamController<ConversionJobEvent>.broadcast();
   final List<ConversionRequest> requests = <ConversionRequest>[];
+  final List<int> cancelledJobIds = <int>[];
   Completer<ConversionJobSnapshot>? _pendingStart;
 
   @override
@@ -206,6 +443,15 @@ class _FakeConversionService implements ConversionService {
     return Future<ConversionJobSnapshot>.value(_snapshot);
   }
 
+  @override
+  Future<void> cancel(int jobId) async {
+    cancelledJobIds.add(jobId);
+    final failure = cancelFailure;
+    if (failure != null) {
+      throw failure;
+    }
+  }
+
   void emit(ConversionJobEvent event) => _events.add(event);
 
   void completeStart() => _pendingStart?.complete(_snapshot);
@@ -218,6 +464,26 @@ class _FakeConversionService implements ConversionService {
     inputPath: '/tmp/source.mov',
     outputPath: '/tmp/source.mp4',
   );
+}
+
+class _FakeWindowClosePort implements WindowClosePort {
+  VoidCallback? onClose;
+  int destroyCount = 0;
+
+  @override
+  Future<void> attach(VoidCallback onClose) async {
+    this.onClose = onClose;
+  }
+
+  @override
+  Future<void> detach() async {
+    onClose = null;
+  }
+
+  @override
+  Future<void> destroy() async {
+    destroyCount += 1;
+  }
 }
 
 class _FakeProbeService implements MediaProbeService {

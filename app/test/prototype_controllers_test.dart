@@ -154,7 +154,7 @@ void main() {
 
       controller.selectMode(MediaOutputMode.videoOnly);
       expect(controller.mode, MediaOutputMode.audioOnly);
-      controller.cancel();
+      await controller.cancel();
       expect(controller.converting, isFalse);
       expect(controller.progress, 0);
     },

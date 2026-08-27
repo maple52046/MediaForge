@@ -747,7 +747,7 @@ fn milliseconds_to_global_timestamp(milliseconds: u64) -> i64 {
 
 struct TemporaryOutput {
     path: PathBuf,
-    // Invariant: this flips only after the final rename succeeds.
+    // Invariant: this flips only after the final destination commit succeeds.
     committed: bool,
 }
 
@@ -780,15 +780,39 @@ impl TemporaryOutput {
     }
 
     fn commit(mut self, output_path: &Path, overwrite: bool) -> Result<(), MediaError> {
-        // Risk: repeat the existence check here to close the race after request validation.
-        if output_path.exists() && !overwrite {
-            return Err(MediaError::OutputExists(output_path.to_path_buf()));
+        if overwrite {
+            fs::rename(&self.path, output_path)
+                .map_err(|error| MediaError::DiskWriteFailed(error.to_string()))?;
+        } else {
+            rename_without_replacement(&self.path, output_path)?;
         }
-        fs::rename(&self.path, output_path)
-            .map_err(|error| MediaError::DiskWriteFailed(error.to_string()))?;
         self.committed = true;
         Ok(())
     }
+}
+
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "redox"))]
+fn rename_without_replacement(source: &Path, destination: &Path) -> Result<(), MediaError> {
+    use rustix::fs::{renameat_with, RenameFlags, CWD};
+    use rustix::io::Errno;
+
+    match renameat_with(CWD, source, CWD, destination, RenameFlags::NOREPLACE) {
+        Ok(()) => Ok(()),
+        Err(Errno::EXIST) => Err(MediaError::OutputExists(destination.to_path_buf())),
+        Err(error) => Err(MediaError::DiskWriteFailed(error.to_string())),
+    }
+}
+
+#[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "redox")))]
+fn rename_without_replacement(source: &Path, destination: &Path) -> Result<(), MediaError> {
+    fs::hard_link(source, destination).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            MediaError::OutputExists(destination.to_path_buf())
+        } else {
+            MediaError::DiskWriteFailed(error.to_string())
+        }
+    })?;
+    fs::remove_file(source).map_err(|error| MediaError::DiskWriteFailed(error.to_string()))
 }
 
 impl Drop for TemporaryOutput {
@@ -817,5 +841,52 @@ mod tests {
         let frame_rate = valid_frame_rate(Rational(0, 0));
         assert_eq!(frame_rate.numerator(), 30);
         assert_eq!(frame_rate.denominator(), 1);
+    }
+
+    #[test]
+    fn no_overwrite_commit_preserves_a_racing_destination() {
+        let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let destination = directory.path().join("output.mp4");
+        let temporary =
+            TemporaryOutput::new(&destination).unwrap_or_else(|error| panic!("{error}"));
+        fs::write(temporary.path(), b"converted").unwrap_or_else(|error| panic!("{error}"));
+        fs::write(&destination, b"racing writer").unwrap_or_else(|error| panic!("{error}"));
+
+        let error = temporary
+            .commit(&destination, false)
+            .expect_err("the racing destination must win");
+
+        assert!(matches!(error, MediaError::OutputExists(path) if path == destination));
+        assert_eq!(
+            fs::read(&destination).unwrap_or_else(|error| panic!("{error}")),
+            b"racing writer"
+        );
+        assert_eq!(
+            fs::read_dir(directory.path())
+                .unwrap_or_else(|error| panic!("{error}"))
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name().to_string_lossy().contains(".part."))
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn overwrite_commit_replaces_the_destination_atomically() {
+        let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let destination = directory.path().join("output.mp4");
+        let temporary =
+            TemporaryOutput::new(&destination).unwrap_or_else(|error| panic!("{error}"));
+        fs::write(temporary.path(), b"converted").unwrap_or_else(|error| panic!("{error}"));
+        fs::write(&destination, b"existing").unwrap_or_else(|error| panic!("{error}"));
+
+        temporary
+            .commit(&destination, true)
+            .unwrap_or_else(|error| panic!("{error}"));
+
+        assert_eq!(
+            fs::read(destination).unwrap_or_else(|error| panic!("{error}")),
+            b"converted"
+        );
     }
 }

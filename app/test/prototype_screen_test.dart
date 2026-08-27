@@ -1,5 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mediaforge/src/conversion_controller.dart';
+import 'package:mediaforge/src/conversion_service.dart';
+import 'package:mediaforge/src/media_metadata.dart';
+import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/mediaforge_app.dart';
 import 'package:mediaforge/src/mf_icon.dart';
 import 'package:mediaforge/src/mf_timeline.dart';
@@ -110,6 +116,61 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('start-conversion')), findsOneWidget);
     expect(find.byKey(const Key('cancel-conversion')), findsNothing);
+  });
+
+  testWidgets('backend progress and cancelling state replace fake metrics', (
+    WidgetTester tester,
+  ) async {
+    await _setSurfaceSize(tester, const Size(1200, 780));
+    final service = _WidgetConversionService();
+    final conversion = ConversionController(
+      service: service,
+      outputPathService: const _WidgetProbeService(),
+    );
+    await tester.pumpWidget(
+      MediaForgePrototypeApp(
+        state: PrototypeState.loaded,
+        conversionController: conversion,
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('start-conversion')));
+    await tester.pump();
+    service.emit(
+      const ConversionJobEvent(
+        kind: ConversionJobEventKind.progress,
+        jobId: 9,
+        percent: 25,
+        processedMs: 250,
+        totalMs: 1000,
+        framesPerSecond: 42.5,
+        speed: 1.8,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('25%'), findsOneWidget);
+    expect(find.text('0.250 / 1.000 sec'), findsOneWidget);
+    expect(find.text('42.5 fps  ·  1.8×'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('cancel-conversion')));
+    await tester.pump();
+    expect(find.text('Cancelling'), findsOneWidget);
+    expect(find.text('Cancelling…'), findsOneWidget);
+    expect(service.cancelledJobIds, <int>[9]);
+
+    service.emit(
+      const ConversionJobEvent(
+        kind: ConversionJobEventKind.cancelled,
+        jobId: 9,
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('conversion-cancelled')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await service.close();
   });
 
   testWidgets('source replacement overlay supports cancel and commit', (
@@ -366,5 +427,56 @@ class _TrackingPreviewController extends PreviewController {
   void togglePlayback() {
     _playing = !_playing;
     notifyListeners();
+  }
+}
+
+class _WidgetConversionService implements ConversionService {
+  final StreamController<ConversionJobEvent> _events =
+      StreamController<ConversionJobEvent>.broadcast();
+  final List<int> cancelledJobIds = <int>[];
+
+  @override
+  Stream<ConversionJobEvent> get jobEvents => _events.stream;
+
+  @override
+  Future<ConversionJobSnapshot> start(ConversionRequest request) async {
+    return ConversionJobSnapshot(
+      jobId: 9,
+      state: ConversionJobState.preparing,
+      inputPath: request.inputPath,
+      outputPath: request.outputPath,
+    );
+  }
+
+  @override
+  Future<void> cancel(int jobId) async {
+    cancelledJobIds.add(jobId);
+  }
+
+  void emit(ConversionJobEvent event) => _events.add(event);
+
+  Future<void> close() => _events.close();
+}
+
+class _WidgetProbeService implements MediaProbeService {
+  const _WidgetProbeService();
+
+  @override
+  Future<String> defaultOutputPath(String path, MediaOutputMode mode) async =>
+      '/tmp/output.mp4';
+
+  @override
+  Future<MediaBackendCapabilities> initializeBackend() async {
+    return const MediaBackendCapabilities(
+      ffmpegVersion: 'fake',
+      h264Available: true,
+      aacAvailable: true,
+      mp3Available: true,
+    );
+  }
+
+  @override
+  Future<MediaMetadata> probe(String path) {
+    throw UnsupportedError('Widget test does not probe media.');
   }
 }

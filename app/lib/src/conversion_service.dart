@@ -214,6 +214,9 @@ abstract interface class ConversionService {
 
   /// Validates and starts one conversion on the Rust application worker.
   Future<ConversionJobSnapshot> start(ConversionRequest request);
+
+  /// Requests cancellation while terminal completion remains event-driven.
+  Future<void> cancel(int jobId);
 }
 
 /// Maps generated FRB conversion values into Flutter-owned plain values.
@@ -256,6 +259,15 @@ class RustConversionService implements ConversionService {
         inputPath: snapshot.inputPath,
         outputPath: snapshot.outputPath,
       );
+    } on bridge.MediaBridgeError catch (error) {
+      throw _mapBridgeFailure(error);
+    }
+  }
+
+  @override
+  Future<void> cancel(int jobId) async {
+    try {
+      await bridge.cancelTranscode(jobId: jobId);
     } on bridge.MediaBridgeError catch (error) {
       throw _mapBridgeFailure(error);
     }

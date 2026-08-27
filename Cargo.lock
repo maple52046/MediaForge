@@ -863,6 +863,7 @@ version = "0.2.0"
 dependencies = [
  "ffmpeg-next",
  "mediaforge-core",
+ "rustix",
  "tempfile",
 ]
 
