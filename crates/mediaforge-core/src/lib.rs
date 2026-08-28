@@ -457,6 +457,13 @@ mod tests {
     }
 
     #[test]
+    fn mp3_quality_maps_to_fixed_bitrates() {
+        assert_eq!(AudioQuality::High.bitrate(), 256_000);
+        assert_eq!(AudioQuality::Medium.bitrate(), 192_000);
+        assert_eq!(AudioQuality::Low.bitrate(), 128_000);
+    }
+
+    #[test]
     fn output_path_uses_mode_extension() {
         assert_eq!(
             propose_output_path(Path::new("/tmp/clip.mov"), OutputMode::AudioOnly),

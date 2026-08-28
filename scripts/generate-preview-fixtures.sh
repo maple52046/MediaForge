@@ -43,3 +43,18 @@ generate_fixture libx264 320x180 preview-h264
 generate_fixture libx265 320x180 preview-hevc
 generate_fixture libx265 180x320 preview-portrait-hevc
 generate_fixture libx264 640x360 cancellation-h264 30 60
+
+ffmpeg \
+  -hide_banner \
+  -loglevel error \
+  -f lavfi \
+  -i "sine=frequency=1000:sample_rate=48000" \
+  -t 2 \
+  -c:a aac \
+  -b:a 160k \
+  -movflags +faststart \
+  -y \
+  "${FIXTURE_DIR}/preview-audio.m4a"
+cp \
+  "${FIXTURE_DIR}/preview-audio.m4a" \
+  "${FLUTTER_FIXTURE_DIR}/preview-audio.m4a"

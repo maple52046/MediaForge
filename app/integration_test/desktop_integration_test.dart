@@ -127,6 +127,15 @@ void main() {
       endsWith('preview-hevc-converted.mp4'),
     );
 
+    final audioOnly = await bridge.probeMedia(
+      path: _bundledFixture('preview-audio.m4a').path,
+    );
+    expect(audioOnly.video, isNull);
+    expect(audioOnly.audio, isNotNull);
+    expect(audioOnly.availableOutputModes, <bridge.MediaOutputMode>[
+      bridge.MediaOutputMode.audioOnly,
+    ]);
+
     await expectLater(
       bridge.probeMedia(path: '${fixture.path}.missing'),
       throwsA(
@@ -202,8 +211,8 @@ void main() {
             find.byKey(const Key('start-conversion')).evaluate().isNotEmpty,
       );
       expect(find.byKey(const Key('mode-videoWithAudio')), findsOneWidget);
-      expect(find.byKey(const Key('mode-videoOnly')), findsNothing);
-      expect(find.byKey(const Key('mode-audioOnly')), findsNothing);
+      expect(find.byKey(const Key('mode-videoOnly')), findsOneWidget);
+      expect(find.byKey(const Key('mode-audioOnly')), findsOneWidget);
 
       final startInput = find.descendant(
         of: find.byKey(const Key('start-time-input')),
@@ -224,15 +233,118 @@ void main() {
       await _waitForNativeState(
         tester,
         () =>
-            find.byKey(const Key('conversion-completed')).evaluate().isNotEmpty,
+            find
+                .byKey(const Key('conversion-completed'))
+                .evaluate()
+                .isNotEmpty ||
+            find.byKey(const Key('conversion-error')).evaluate().isNotEmpty,
         timeout: const Duration(seconds: 20),
       );
+      _expectNoConversionError(tester);
 
       expect(await output.exists(), isTrue);
       final outputInfo = await bridge.probeMedia(path: output.path);
       expect(outputInfo.video, isNotNull);
       expect(outputInfo.audio, isNotNull);
       expect(outputInfo.durationMs, inInclusiveRange(900, 1300));
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (await temporaryDirectory.exists()) {
+        await temporaryDirectory.delete(recursive: true);
+      }
+    }
+  });
+
+  testWidgets('macOS runner completes Video Only and Audio Only workflows', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 780);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final temporaryDirectory = await Directory.systemTemp.createTemp(
+      'mediaforge-m9-',
+    );
+    final input = File('${temporaryDirectory.path}/secondary.mov');
+    final videoOutput = File('${temporaryDirectory.path}/secondary.mp4');
+    final audioOutput = File('${temporaryDirectory.path}/secondary.mp3');
+    await _bundledFixture('preview-h264.mp4').copy(input.path);
+
+    try {
+      await tester.pumpWidget(
+        MediaForgePrototypeApp(
+          state: PrototypeState.empty,
+          previewSource: input.path,
+          mediaProbeService: const RustMediaProbeService(),
+          conversionService: const RustConversionService(),
+        ),
+      );
+      await _waitForNativeState(
+        tester,
+        () => find.byKey(const Key('mode-videoOnly')).evaluate().isNotEmpty,
+      );
+      await tester.tap(find.byKey(const Key('mode-videoOnly')));
+      await tester.pump();
+      await _waitForNativeState(
+        tester,
+        () => find.text('secondary.mp4').evaluate().isNotEmpty,
+      );
+      await tester.tap(find.byKey(const Key('start-conversion')));
+      await _waitForNativeState(
+        tester,
+        () =>
+            find
+                .byKey(const Key('conversion-completed'))
+                .evaluate()
+                .isNotEmpty ||
+            find.byKey(const Key('conversion-error')).evaluate().isNotEmpty,
+        timeout: const Duration(seconds: 20),
+      );
+      _expectNoConversionError(tester);
+      final videoInfo = await bridge.probeMedia(path: videoOutput.path);
+      expect(videoInfo.video, isNotNull);
+      expect(videoInfo.audio, isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await tester.pumpWidget(
+        MediaForgePrototypeApp(
+          state: PrototypeState.empty,
+          previewSource: input.path,
+          mediaProbeService: const RustMediaProbeService(),
+          conversionService: const RustConversionService(),
+        ),
+      );
+      await _waitForNativeState(
+        tester,
+        () => find.byKey(const Key('mode-audioOnly')).evaluate().isNotEmpty,
+      );
+      await tester.tap(find.byKey(const Key('mode-audioOnly')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('quality-low')));
+      await tester.pump();
+      await _waitForNativeState(
+        tester,
+        () => find.text('secondary.mp3').evaluate().isNotEmpty,
+      );
+      expect(find.text('MP3 · 128 kbps'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('start-conversion')));
+      await _waitForNativeState(
+        tester,
+        () =>
+            find
+                .byKey(const Key('conversion-completed'))
+                .evaluate()
+                .isNotEmpty ||
+            find.byKey(const Key('conversion-error')).evaluate().isNotEmpty,
+        timeout: const Duration(seconds: 20),
+      );
+      _expectNoConversionError(tester);
+      final audioInfo = await bridge.probeMedia(path: audioOutput.path);
+      expect(audioInfo.video, isNull);
+      expect(audioInfo.audio, isNotNull);
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -495,6 +607,14 @@ void _expectNoWorkspaceScrollable(WidgetTester tester) {
     if (renderObject is RenderBox) {
       expect(renderObject.size.height, lessThan(100));
     }
+  }
+}
+
+void _expectNoConversionError(WidgetTester tester) {
+  final finder = find.byKey(const Key('conversion-error'));
+  if (finder.evaluate().isNotEmpty) {
+    final code = tester.widget<Text>(finder).data ?? 'unknown';
+    fail('Native conversion failed with $code.');
   }
 }
 

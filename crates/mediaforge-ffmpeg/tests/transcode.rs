@@ -68,10 +68,16 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
     let trim = TrimRange::new(250, 1_250, source_info.duration_ms)
         .expect("fixture must contain the test selection");
 
-    for (mode, extension) in [
-        (OutputMode::VideoWithAudio, "full.mp4"),
-        (OutputMode::VideoOnly, "video.mp4"),
-        (OutputMode::AudioOnly, "audio.mp3"),
+    for (mode, quality, extension) in [
+        (OutputMode::VideoWithAudio, AudioQuality::Medium, "full.mp4"),
+        (OutputMode::VideoOnly, AudioQuality::Medium, "video.mp4"),
+        (OutputMode::AudioOnly, AudioQuality::High, "audio-high.mp3"),
+        (
+            OutputMode::AudioOnly,
+            AudioQuality::Medium,
+            "audio-medium.mp3",
+        ),
+        (OutputMode::AudioOnly, AudioQuality::Low, "audio-low.mp3"),
     ] {
         let output = workspace.path().join(extension);
         let progress = RecordedProgress::default();
@@ -82,7 +88,7 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
                     output_path: output.clone(),
                     mode,
                     trim,
-                    audio_quality: AudioQuality::Medium,
+                    audio_quality: quality,
                     overwrite: false,
                 },
                 &progress,
@@ -91,6 +97,8 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
             .unwrap_or_else(|error| panic!("{mode:?} transcode failed: {error}"));
         let output_info = backend.probe(&output).expect("output must be probed");
         assert!(output_info.duration_ms > 500);
+        assert_eq!(output_info.video.is_some(), mode != OutputMode::AudioOnly);
+        assert_eq!(output_info.audio.is_some(), mode != OutputMode::VideoOnly);
         assert!(progress
             .samples
             .lock()
@@ -145,25 +153,42 @@ fn validates_representative_user_media_without_mutating_the_source() {
     let trim = TrimRange::new(0, trim_end, source_info.duration_ms)
         .expect("representative source must contain a non-empty selection");
     let workspace = tempfile::tempdir().expect("test workspace must be created");
-    let output = workspace.path().join("representative.mp4");
-
-    backend
-        .transcode(
-            &TranscodeRequest {
-                input_path: source.clone(),
-                output_path: output.clone(),
-                mode: OutputMode::VideoWithAudio,
-                trim,
-                audio_quality: AudioQuality::Medium,
-                overwrite: false,
-            },
-            &RecordedProgress::default(),
-            Arc::new(NeverCancelled),
-        )
-        .expect("representative source must transcode through the library backend");
-    let output_info = backend.probe(&output).expect("output must be probed");
-    assert!(output_info.video.is_some());
-    assert!(output_info.audio.is_some());
+    for (mode, quality, file_name) in [
+        (
+            OutputMode::VideoWithAudio,
+            AudioQuality::Medium,
+            "representative.mp4",
+        ),
+        (
+            OutputMode::VideoOnly,
+            AudioQuality::Medium,
+            "representative-video.mp4",
+        ),
+        (
+            OutputMode::AudioOnly,
+            AudioQuality::High,
+            "representative-audio.mp3",
+        ),
+    ] {
+        let output = workspace.path().join(file_name);
+        backend
+            .transcode(
+                &TranscodeRequest {
+                    input_path: source.clone(),
+                    output_path: output.clone(),
+                    mode,
+                    trim,
+                    audio_quality: quality,
+                    overwrite: false,
+                },
+                &RecordedProgress::default(),
+                Arc::new(NeverCancelled),
+            )
+            .unwrap_or_else(|error| panic!("{mode:?} representative transcode failed: {error}"));
+        let output_info = backend.probe(&output).expect("output must be probed");
+        assert_eq!(output_info.video.is_some(), mode != OutputMode::AudioOnly);
+        assert_eq!(output_info.audio.is_some(), mode != OutputMode::VideoOnly);
+    }
 
     let cancelled_output = workspace.path().join("representative-cancelled.mp4");
     let cancellation = Arc::new(CancelAfterProgress::default());

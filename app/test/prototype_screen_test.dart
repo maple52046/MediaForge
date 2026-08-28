@@ -98,6 +98,33 @@ void main() {
     expect(find.text('Convert video'), findsOneWidget);
   });
 
+  testWidgets('MP3 quality is accessible and fits the minimum viewport', (
+    WidgetTester tester,
+  ) async {
+    await _setSurfaceSize(tester, supportedSizes.first);
+    await tester.pumpWidget(
+      const MediaForgePrototypeApp(state: PrototypeState.loaded),
+    );
+
+    await tester.tap(find.byKey(const Key('mode-audioOnly')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('quality-medium')), findsOneWidget);
+    expect(find.bySemanticsLabel('High'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('quality-high')));
+    await tester.pumpAndSettle();
+    expect(find.text('MP3 · 256 kbps'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    _expectNoWorkspaceScrollable(tester);
+
+    await tester.tap(find.byKey(const Key('start-conversion')));
+    await tester.pumpAndSettle();
+    expect(find.text('Encoding audio'), findsOneWidget);
+    expect(find.text('Encoding MP3 · 256 kbps'), findsOneWidget);
+    expect(find.text('Finalizing MP3'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('cancel-conversion')));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('fake conversion starts, reports progress, and cancels', (
     WidgetTester tester,
   ) async {

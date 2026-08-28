@@ -9,7 +9,7 @@ import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/window_close_coordinator.dart';
 
 void main() {
-  test('functional controller enables only primary Video + Audio', () async {
+  test('functional controller enables every Rust-authoritative mode', () async {
     final conversionService = _FakeConversionService();
     final pathService = _FakeProbeService('/tmp/source.mp4');
     final controller = ConversionController(
@@ -25,13 +25,13 @@ void main() {
     controller.setMedia(_media());
     await _drainEvents();
 
-    expect(controller.availableModes, const <MediaOutputMode>[
-      MediaOutputMode.videoWithAudio,
-    ]);
+    expect(controller.availableModes, MediaOutputMode.values);
     expect(controller.outputPath, '/tmp/source.mp4');
     expect(controller.canStart, isTrue);
     controller.selectMode(MediaOutputMode.audioOnly);
-    expect(controller.mode, MediaOutputMode.videoWithAudio);
+    expect(controller.mode, MediaOutputMode.audioOnly);
+    controller.selectMode(MediaOutputMode.videoWithAudio);
+    await _drainEvents();
 
     await controller.start(startMs: 200, endMs: 1200);
     final request = conversionService.requests.single;
@@ -122,7 +122,7 @@ void main() {
     expect(controller.canStart, isTrue);
   });
 
-  test('source without both streams cannot start the M7 workflow', () async {
+  test('video-only source selects its sole authoritative mode', () async {
     final conversionService = _FakeConversionService();
     final controller = ConversionController(
       service: conversionService,
@@ -149,11 +149,107 @@ void main() {
     );
     await _drainEvents();
 
-    expect(controller.availableModes, isEmpty);
-    expect(controller.canStart, isFalse);
-    expect(controller.failure?.code, ConversionErrorCode.unsupportedInput);
+    expect(controller.availableModes, const <MediaOutputMode>[
+      MediaOutputMode.videoOnly,
+    ]);
+    expect(controller.mode, MediaOutputMode.videoOnly);
+    expect(controller.canStart, isTrue);
+    expect(controller.failure, isNull);
     expect(conversionService.requests, isEmpty);
   });
+
+  test('audio-only source selects its sole authoritative mode', () async {
+    final conversionService = _FakeConversionService();
+    final controller = ConversionController(
+      service: conversionService,
+      outputPathService: _FakeProbeService('/tmp/source.mp3'),
+    );
+    addTearDown(() async {
+      await controller.close();
+      controller.dispose();
+      await conversionService.close();
+    });
+    controller.setMedia(
+      MediaMetadata(
+        path: '/tmp/audio.m4a',
+        fileName: 'audio.m4a',
+        fileSizeBytes: 1,
+        durationMs: 2000,
+        format: 'mov',
+        video: null,
+        audio: _media().audio,
+        availableOutputModes: const <MediaOutputMode>[
+          MediaOutputMode.audioOnly,
+        ],
+      ),
+    );
+    await _drainEvents();
+
+    expect(controller.availableModes, const <MediaOutputMode>[
+      MediaOutputMode.audioOnly,
+    ]);
+    expect(controller.mode, MediaOutputMode.audioOnly);
+    expect(controller.canStart, isTrue);
+    expect(controller.outputPath, '/tmp/source.mp3');
+  });
+
+  test('audio quality reaches the request and locks while active', () async {
+    final conversionService = _FakeConversionService();
+    final controller = ConversionController(
+      service: conversionService,
+      outputPathService: _FakeProbeService('/tmp/source.mp3'),
+    );
+    addTearDown(() async {
+      await controller.close();
+      controller.dispose();
+      await conversionService.close();
+    });
+    controller.setMedia(_media());
+    controller.selectMode(MediaOutputMode.audioOnly);
+    controller.selectAudioQuality(ConversionAudioQuality.high);
+    await _drainEvents();
+
+    await controller.start(startMs: 0, endMs: 2000);
+    final request = conversionService.requests.single;
+    expect(request.mode, MediaOutputMode.audioOnly);
+    expect(request.audioQuality, ConversionAudioQuality.high);
+    controller.selectAudioQuality(ConversionAudioQuality.low);
+    expect(controller.audioQuality, ConversionAudioQuality.high);
+
+    conversionService.emit(
+      const ConversionJobEvent(
+        kind: ConversionJobEventKind.cancelled,
+        jobId: 7,
+      ),
+    );
+    await _drainEvents();
+  });
+
+  test(
+    'new audiovisual source restores its authoritative default mode',
+    () async {
+      final conversionService = _FakeConversionService();
+      final controller = ConversionController(
+        service: conversionService,
+        outputPathService: _FakeProbeService('/tmp/source.mp4'),
+      );
+      addTearDown(() async {
+        await controller.close();
+        controller.dispose();
+        await conversionService.close();
+      });
+      controller.setMedia(_media());
+      controller.selectMode(MediaOutputMode.audioOnly);
+      controller.selectAudioQuality(ConversionAudioQuality.high);
+      await _drainEvents();
+
+      controller.setMedia(_media());
+      await _drainEvents();
+
+      expect(controller.mode, MediaOutputMode.videoWithAudio);
+      expect(controller.audioQuality, ConversionAudioQuality.high);
+    },
+  );
 
   test('progress remains monotonic and preserves backend telemetry', () async {
     final conversionService = _FakeConversionService();

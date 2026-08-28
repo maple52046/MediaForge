@@ -1268,7 +1268,10 @@ class _ReadyContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final values = _ModePresentation.fromMode(conversion.mode);
+    final values = _ModePresentation.fromMode(
+      conversion.mode,
+      conversion.audioQuality,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1292,6 +1295,12 @@ class _ReadyContent extends StatelessWidget {
         _OptionRow(label: 'Container', value: values.container),
         _OptionRow(label: 'Video', value: values.video),
         _OptionRow(label: 'Audio', value: values.audio),
+        if (conversion.mode == MediaOutputMode.audioOnly) ...[
+          const SizedBox(height: MfSpacing.md),
+          const _SectionLabel('MP3 QUALITY'),
+          const SizedBox(height: MfSpacing.xs),
+          _AudioQualitySelector(conversion: conversion),
+        ],
         const SizedBox(height: MfSpacing.md),
         const _SectionLabel('DESTINATION'),
         const SizedBox(height: MfSpacing.xs),
@@ -1367,6 +1376,10 @@ class _ConvertingContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final presentation = _ConversionPresentation.fromMode(
+      conversion.mode,
+      conversion.audioQuality,
+    );
     final percent = (conversion.progress * 100).round();
     final hasBackendSample = conversion.totalMs > 0;
     final totalMs = hasBackendSample
@@ -1383,10 +1396,7 @@ class _ConvertingContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PaneTitle(
-          title: 'Converting',
-          caption: 'Hardware-accelerated H.264',
-        ),
+        _PaneTitle(title: 'Converting', caption: presentation.caption),
         const SizedBox(height: MfSpacing.xl),
         _SourceSummary(
           media: mediaSession.media!,
@@ -1397,7 +1407,7 @@ class _ConvertingContent extends StatelessWidget {
         Row(
           children: [
             Text(
-              conversion.cancelling ? 'Cancelling' : 'Encoding video',
+              conversion.cancelling ? 'Cancelling' : presentation.stage,
               key: const Key('conversion-stage'),
               style: const TextStyle(
                 color: MfPalette.foreground,
@@ -1448,9 +1458,9 @@ class _ConvertingContent extends StatelessWidget {
         const SizedBox(height: MfSpacing.xxl),
         const _ConversionStep(active: false, label: 'Preparing media'),
         const SizedBox(height: MfSpacing.md),
-        const _ConversionStep(active: true, label: 'Encoding H.264 + AAC'),
+        _ConversionStep(active: true, label: presentation.encodingStep),
         const SizedBox(height: MfSpacing.md),
-        const _ConversionStep(active: false, label: 'Finalizing MP4'),
+        _ConversionStep(active: false, label: presentation.finalizingStep),
         const Spacer(),
         const Text(
           'Writing to a protected temporary file. Your existing destination remains unchanged until conversion succeeds.',
@@ -1636,6 +1646,38 @@ class _SegmentedModes extends StatelessWidget {
   };
 }
 
+class _AudioQualitySelector extends StatelessWidget {
+  const _AudioQualitySelector({required this.conversion});
+
+  final ConversionController conversion;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.all(MfSpacing.xxs),
+      decoration: BoxDecoration(
+        color: MfPalette.background,
+        borderRadius: BorderRadius.circular(MfRadius.md),
+        border: Border.all(color: MfPalette.border),
+      ),
+      child: Row(
+        children: [
+          for (final quality in ConversionAudioQuality.values)
+            Expanded(
+              child: _ModeOption(
+                key: Key('quality-${quality.name}'),
+                label: _audioQualityLabel(quality),
+                selected: quality == conversion.audioQuality,
+                onPressed: () => conversion.selectAudioQuality(quality),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ModeOption extends StatefulWidget {
   const _ModeOption({
     required this.label,
@@ -1671,6 +1713,7 @@ class _ModeOptionState extends State<_ModeOption> {
       button: true,
       selected: widget.selected,
       label: widget.label,
+      excludeSemantics: true,
       onTap: widget.onPressed,
       child: Focus(
         focusNode: _focusNode,
@@ -1932,7 +1975,10 @@ class _ModePresentation {
     required this.actionLabel,
   });
 
-  factory _ModePresentation.fromMode(MediaOutputMode mode) {
+  factory _ModePresentation.fromMode(
+    MediaOutputMode mode,
+    ConversionAudioQuality quality,
+  ) {
     return switch (mode) {
       MediaOutputMode.videoWithAudio => const _ModePresentation(
         container: 'MP4',
@@ -1948,10 +1994,10 @@ class _ModePresentation {
         estimatedSize: '7–9 MB',
         actionLabel: 'Convert video',
       ),
-      MediaOutputMode.audioOnly => const _ModePresentation(
+      MediaOutputMode.audioOnly => _ModePresentation(
         container: 'MP3',
         video: 'None',
-        audio: 'MP3 · 192 kbps',
+        audio: 'MP3 · ${_audioQualityBitrate(quality)}',
         estimatedSize: '1–2 MB',
         actionLabel: 'Convert audio',
       ),
@@ -1964,3 +2010,56 @@ class _ModePresentation {
   final String estimatedSize;
   final String actionLabel;
 }
+
+class _ConversionPresentation {
+  const _ConversionPresentation({
+    required this.caption,
+    required this.stage,
+    required this.encodingStep,
+    required this.finalizingStep,
+  });
+
+  factory _ConversionPresentation.fromMode(
+    MediaOutputMode mode,
+    ConversionAudioQuality quality,
+  ) {
+    return switch (mode) {
+      MediaOutputMode.videoWithAudio => const _ConversionPresentation(
+        caption: 'Hardware-accelerated H.264',
+        stage: 'Encoding video',
+        encodingStep: 'Encoding H.264 + AAC',
+        finalizingStep: 'Finalizing MP4',
+      ),
+      MediaOutputMode.videoOnly => const _ConversionPresentation(
+        caption: 'Hardware-accelerated H.264',
+        stage: 'Encoding video',
+        encodingStep: 'Encoding H.264',
+        finalizingStep: 'Finalizing MP4',
+      ),
+      MediaOutputMode.audioOnly => _ConversionPresentation(
+        caption: 'MP3 · ${_audioQualityBitrate(quality)}',
+        stage: 'Encoding audio',
+        encodingStep: 'Encoding MP3 · ${_audioQualityBitrate(quality)}',
+        finalizingStep: 'Finalizing MP3',
+      ),
+    };
+  }
+
+  final String caption;
+  final String stage;
+  final String encodingStep;
+  final String finalizingStep;
+}
+
+String _audioQualityLabel(ConversionAudioQuality quality) => switch (quality) {
+  ConversionAudioQuality.high => 'High',
+  ConversionAudioQuality.medium => 'Medium',
+  ConversionAudioQuality.low => 'Low',
+};
+
+String _audioQualityBitrate(ConversionAudioQuality quality) =>
+    switch (quality) {
+      ConversionAudioQuality.high => '256 kbps',
+      ConversionAudioQuality.medium => '192 kbps',
+      ConversionAudioQuality.low => '128 kbps',
+    };

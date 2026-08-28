@@ -1,7 +1,7 @@
 import '../bridge/api/media.dart' as bridge;
 import 'media_metadata.dart';
 
-/// Audio quality retained in the conversion request boundary.
+/// MP3 quality selected for audio-only conversion.
 enum ConversionAudioQuality {
   /// 256 kbps MP3.
   high,
@@ -113,7 +113,7 @@ class ConversionRequest {
   /// Selected Rust-authoritative output recipe.
   final MediaOutputMode mode;
 
-  /// MP3 quality retained for later audio-only support.
+  /// MP3 quality used when [mode] is [MediaOutputMode.audioOnly].
   final ConversionAudioQuality audioQuality;
 
   /// Inclusive trim start in integer milliseconds.

@@ -8,16 +8,14 @@ import 'media_probe_service.dart';
 
 /// Owns output selection and one conversion lifecycle at the Flutter edge.
 class ConversionController extends ChangeNotifier {
-  /// Creates a backend-connected controller limited to the primary recipe.
+  /// Creates a backend-connected controller for Rust-authoritative recipes.
   ConversionController({
     required ConversionService service,
     required MediaProbeService outputPathService,
   }) : this._(
          service: service,
          outputPathService: outputPathService,
-         supportedModes: const <MediaOutputMode>[
-           MediaOutputMode.videoWithAudio,
-         ],
+         supportedModes: MediaOutputMode.values,
        );
 
   /// Creates deterministic presentation-only state for visual and widget tests.
@@ -66,6 +64,7 @@ class ConversionController extends ChangeNotifier {
   MediaMetadata? _media;
   List<MediaOutputMode> _availableModes;
   MediaOutputMode _mode = MediaOutputMode.videoWithAudio;
+  ConversionAudioQuality _audioQuality = ConversionAudioQuality.medium;
   bool _converting;
   double _progress;
   ConversionJobState _jobState;
@@ -87,6 +86,9 @@ class ConversionController extends ChangeNotifier {
 
   /// Selected output recipe.
   MediaOutputMode get mode => _mode;
+
+  /// Selected MP3 quality retained while other output modes are active.
+  ConversionAudioQuality get audioQuality => _audioQuality;
 
   /// Ordered recipes enabled for the current shell and source.
   List<MediaOutputMode> get availableModes => _availableModes;
@@ -148,14 +150,13 @@ class ConversionController extends ChangeNotifier {
     _speed = null;
     _completedOutputPath = null;
     _failure = null;
-    _applyAvailableModes(media.availableOutputModes);
+    _applyAvailableModes(media.availableOutputModes, resetSelection: true);
     final generation = ++_destinationGeneration;
     if (_service != null && _availableModes.isEmpty) {
       _outputPath = null;
       _failure = const ConversionFailure(
         code: ConversionErrorCode.unsupportedInput,
-        diagnostic:
-            'The primary workflow requires both video and audio streams.',
+        diagnostic: 'The source does not expose a supported output mode.',
       );
       _notifyListeners();
       return;
@@ -192,6 +193,17 @@ class ConversionController extends ChangeNotifier {
     _outputPath = null;
     _notifyListeners();
     unawaited(_resolveOutputPath(media, mode, generation));
+  }
+
+  /// Selects MP3 quality while no conversion is active.
+  void selectAudioQuality(ConversionAudioQuality quality) {
+    if (_converting || _audioQuality == quality) {
+      return;
+    }
+    _audioQuality = quality;
+    _completedOutputPath = null;
+    _failure = null;
+    _notifyListeners();
   }
 
   /// Replaces mode availability in deterministic presentation-only tests.
@@ -252,7 +264,7 @@ class ConversionController extends ChangeNotifier {
           inputPath: media.path,
           outputPath: outputPath,
           mode: _mode,
-          audioQuality: ConversionAudioQuality.medium,
+          audioQuality: _audioQuality,
           startMs: startMs,
           endMs: endMs,
           overwrite: false,
@@ -320,12 +332,15 @@ class ConversionController extends ChangeNotifier {
   /// Cancels the event subscription once and awaits stream cleanup.
   Future<void> close() => _closeFuture ??= _close();
 
-  void _applyAvailableModes(List<MediaOutputMode> modes) {
+  void _applyAvailableModes(
+    List<MediaOutputMode> modes, {
+    bool resetSelection = false,
+  }) {
     final next = List<MediaOutputMode>.unmodifiable(
       modes.where(_supportedModes.contains),
     );
     _availableModes = next;
-    if (!next.contains(_mode) && next.isNotEmpty) {
+    if (next.isNotEmpty && (resetSelection || !next.contains(_mode))) {
       _mode = next.first;
     }
   }

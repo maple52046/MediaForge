@@ -71,7 +71,7 @@ pub enum MediaOutputMode {
     AudioOnly,
 }
 
-/// MP3 quality values retained in the stable conversion request contract.
+/// MP3 quality values in the stable conversion request contract.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MediaAudioQuality {
     /// 256 kbps MP3.
@@ -91,7 +91,7 @@ pub struct StartTranscodeRequestDto {
     pub output_path: String,
     /// Requested output recipe.
     pub mode: MediaOutputMode,
-    /// MP3 quality retained for the future audio-only workflow.
+    /// MP3 quality used when the selected recipe is audio-only.
     pub audio_quality: MediaAudioQuality,
     /// Inclusive trim start in integer milliseconds.
     pub start_ms: u64,
@@ -272,7 +272,7 @@ pub fn default_output_path(
     path_to_string(propose_output_path(&canonical_path, mode.into()))
 }
 
-/// Validates and starts one primary Video + Audio conversion.
+/// Validates and starts one conversion supported by the probed source.
 ///
 /// # Errors
 ///
@@ -464,13 +464,6 @@ fn build_transcode_request(
     } = request;
     drop((request_input_path, request_output_path));
     let mode = OutputMode::from(mode);
-    if mode != OutputMode::VideoWithAudio {
-        return Err(MediaBridgeError::from(ApplicationError::from(
-            MediaError::UnsupportedInput(
-                "only Video + Audio conversion is enabled in this release milestone".to_owned(),
-            ),
-        )));
-    }
     media.validate_mode(mode).map_err(ApplicationError::from)?;
     let trim =
         TrimRange::new(start_ms, end_ms, media.duration_ms).map_err(ApplicationError::from)?;
@@ -803,7 +796,7 @@ mod tests {
     }
 
     #[test]
-    fn primary_request_reconstructs_domain_trim_and_rejects_other_modes() {
+    fn request_reconstructs_all_domain_modes_and_quality_values() {
         let media = MediaInfo {
             path: PathBuf::from("/tmp/input.mov"),
             file_name: "input.mov".to_owned(),
@@ -844,6 +837,8 @@ mod tests {
         .unwrap_or_else(|error| panic!("{error}"));
         assert_eq!(domain.trim.start_ms(), 200);
         assert_eq!(domain.trim.end_ms(), 1_200);
+        assert_eq!(domain.mode, OutputMode::VideoWithAudio);
+        assert_eq!(domain.audio_quality, AudioQuality::Medium);
         assert!(!domain.overwrite);
 
         let invalid_trim = build_transcode_request(
@@ -859,16 +854,52 @@ mod tests {
         .expect_err("an empty trim must remain a structured domain failure");
         assert_eq!(invalid_trim.code, MediaBridgeErrorCode::InvalidTrimRange);
 
-        let error = build_transcode_request(
+        let video_only = build_transcode_request(
             StartTranscodeRequestDto {
                 mode: MediaOutputMode::VideoOnly,
-                ..request
+                audio_quality: MediaAudioQuality::High,
+                ..request.clone()
             },
             PathBuf::from("/tmp/input.mov"),
             PathBuf::from("/tmp/output.mp4"),
             &media,
         )
-        .expect_err("secondary modes remain disabled until M9");
+        .unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(video_only.mode, OutputMode::VideoOnly);
+        assert_eq!(video_only.audio_quality, AudioQuality::High);
+
+        let audio_only = build_transcode_request(
+            StartTranscodeRequestDto {
+                mode: MediaOutputMode::AudioOnly,
+                audio_quality: MediaAudioQuality::Low,
+                ..request
+            },
+            PathBuf::from("/tmp/input.mov"),
+            PathBuf::from("/tmp/output.mp3"),
+            &media,
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(audio_only.mode, OutputMode::AudioOnly);
+        assert_eq!(audio_only.audio_quality, AudioQuality::Low);
+
+        let error = build_transcode_request(
+            StartTranscodeRequestDto {
+                input_path: "/tmp/input.mov".to_owned(),
+                output_path: "/tmp/output.mp3".to_owned(),
+                mode: MediaOutputMode::AudioOnly,
+                audio_quality: MediaAudioQuality::Medium,
+                start_ms: 0,
+                end_ms: 1_000,
+                overwrite: false,
+            },
+            PathBuf::from("/tmp/input.mov"),
+            PathBuf::from("/tmp/output.mp3"),
+            &MediaInfo {
+                audio: None,
+                ..media
+            },
+        )
+        .expect_err("audio-only must reject a source without audio");
         assert_eq!(error.code, MediaBridgeErrorCode::UnsupportedInput);
     }
 }

@@ -46,7 +46,7 @@ Future<String> defaultOutputPath({
   mode: mode,
 );
 
-/// Validates and starts one primary Video + Audio conversion.
+/// Validates and starts one conversion supported by the probed source.
 ///
 /// # Errors
 ///
@@ -301,7 +301,7 @@ enum JobStateDto {
   failed,
 }
 
-/// MP3 quality values retained in the stable conversion request contract.
+/// MP3 quality values in the stable conversion request contract.
 enum MediaAudioQuality {
   /// 256 kbps MP3.
   high,
@@ -470,7 +470,7 @@ class StartTranscodeRequestDto {
   /// Requested output recipe.
   final MediaOutputMode mode;
 
-  /// MP3 quality retained for the future audio-only workflow.
+  /// MP3 quality used when the selected recipe is audio-only.
   final MediaAudioQuality audioQuality;
 
   /// Inclusive trim start in integer milliseconds.
