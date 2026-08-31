@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'media_time.dart';
+import 'mf_localizations.dart';
 import 'mf_tokens.dart';
 
 /// Marker controlled by keyboard or pointer input on [MfTimeline].
@@ -76,30 +77,31 @@ class _MfTimelineState extends State<MfTimeline> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         _width = constraints.maxWidth;
         final tooltipMs = _dragging ? _activeValue : _hoverMs;
         final tooltipX = _xForValue(tooltipMs ?? _activeValue);
         return Semantics(
-          label: 'Trim timeline',
+          label: strings.trimTimeline,
           value:
-              '${_markerLabel(_activeMarker)} ${_preciseTime(_activeValue)}. '
-              'Selection ${_preciseTime(widget.startMs)} to '
-              '${_preciseTime(widget.endMs)}.',
+              '${_markerLabel(_activeMarker, strings)} '
+              '${_preciseTime(_activeValue)}. '
+              '${strings.selectionSemantics(_preciseTime(widget.startMs), _preciseTime(widget.endMs))}',
           increasedValue: _preciseTime(_nextKeyboardValue(100)),
           decreasedValue: _preciseTime(_nextKeyboardValue(-100)),
           onIncrease: () => _moveActiveMarker(100),
           onDecrease: () => _moveActiveMarker(-100),
           onTap: _focusNode.requestFocus,
           customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
-            const CustomSemanticsAction(label: 'Select start handle'): () {
+            CustomSemanticsAction(label: strings.selectStartHandle): () {
               _selectMarker(MfTimelineMarker.start);
             },
-            const CustomSemanticsAction(label: 'Select end handle'): () {
+            CustomSemanticsAction(label: strings.selectEndHandle): () {
               _selectMarker(MfTimelineMarker.end);
             },
-            const CustomSemanticsAction(label: 'Select playhead'): () {
+            CustomSemanticsAction(label: strings.selectPlayhead): () {
               _selectMarker(MfTimelineMarker.playhead);
             },
           },
@@ -150,6 +152,8 @@ class _MfTimelineState extends State<MfTimeline> {
                           activeMarker: _activeMarker,
                           focused: _focusNode.hasFocus,
                           hoverMs: _hoverMs,
+                          lightPalette:
+                              MfPalette.background == MfLightPalette.background,
                         ),
                       ),
                     ),
@@ -278,11 +282,12 @@ class _MfTimelineState extends State<MfTimeline> {
     return _trackInset + usableWidth * valueMs / widget.durationMs;
   }
 
-  String _markerLabel(MfTimelineMarker marker) => switch (marker) {
-    MfTimelineMarker.start => 'Start handle',
-    MfTimelineMarker.end => 'End handle',
-    MfTimelineMarker.playhead => 'Playhead',
-  };
+  String _markerLabel(MfTimelineMarker marker, MfStrings strings) =>
+      switch (marker) {
+        MfTimelineMarker.start => strings.startHandle,
+        MfTimelineMarker.end => strings.endHandle,
+        MfTimelineMarker.playhead => strings.playhead,
+      };
 
   String _preciseTime(int valueMs) =>
       formatMediaTime(valueMs, includeMilliseconds: true);
@@ -306,7 +311,7 @@ class _TimelineTooltip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(color: MfPalette.foreground, fontSize: 9),
+        style: TextStyle(color: MfPalette.foreground, fontSize: 9),
       ),
     );
   }
@@ -321,6 +326,7 @@ class _MfTimelinePainter extends CustomPainter {
     required this.activeMarker,
     required this.focused,
     required this.hoverMs,
+    required this.lightPalette,
   });
 
   final int durationMs;
@@ -330,6 +336,7 @@ class _MfTimelinePainter extends CustomPainter {
   final MfTimelineMarker activeMarker;
   final bool focused;
   final int? hoverMs;
+  final bool lightPalette;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -415,6 +422,7 @@ class _MfTimelinePainter extends CustomPainter {
         playheadMs != oldDelegate.playheadMs ||
         activeMarker != oldDelegate.activeMarker ||
         focused != oldDelegate.focused ||
-        hoverMs != oldDelegate.hoverMs;
+        hoverMs != oldDelegate.hoverMs ||
+        lightPalette != oldDelegate.lightPalette;
   }
 }

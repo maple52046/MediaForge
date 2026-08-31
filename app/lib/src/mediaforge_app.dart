@@ -6,14 +6,17 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'conversion_controller.dart';
 import 'conversion_service.dart';
+import 'file_selection.dart';
 import 'media_kit_preview.dart';
 import 'media_probe_service.dart';
 import 'media_session_controller.dart';
+import 'mf_localizations.dart';
 import 'mf_tokens.dart';
 import 'preview_controller.dart';
 import 'prototype_controllers.dart';
 import 'prototype_screen.dart';
 import 'prototype_state.dart';
+import 'settings_controller.dart';
 import 'timeline_controller.dart';
 import 'window_close_coordinator.dart';
 
@@ -26,6 +29,10 @@ class MediaForgePrototypeApp extends StatefulWidget {
     this.showDropOverlay = false,
     this.showSettingsPopover = false,
     this.previewSource,
+    this.fileSelection,
+    this.settingsStore,
+    this.systemLocales,
+    this.platformBrightness,
     this.mediaProbeService,
     this.conversionService,
     this.conversionController,
@@ -61,6 +68,18 @@ class MediaForgePrototypeApp extends StatefulWidget {
   /// File path or media_kit URI opened by the native preview adapter.
   final String? previewSource;
 
+  /// Optional native file and directory selection boundary.
+  final FileSelectionPort? fileSelection;
+
+  /// Optional settings persistence boundary; omission uses volatile storage.
+  final SettingsStore? settingsStore;
+
+  /// Optional platform locales used by deterministic tests.
+  final List<Locale>? systemLocales;
+
+  /// Optional platform brightness used by deterministic tests.
+  final Brightness? platformBrightness;
+
   /// Optional native probe boundary; omission retains deterministic visual data.
   final MediaProbeService? mediaProbeService;
 
@@ -92,7 +111,8 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
   String? _conversionSourcePath;
   late final TimelineController _timeline;
   late final ConversionController _conversion;
-  late final SettingsPrototypeController _settings;
+  late final SettingsController _settings;
+  late final DesktopDropSourceCoordinator _dropSource;
   ConversionWindowCloseCoordinator? _windowCloseCoordinator;
 
   @override
@@ -103,9 +123,15 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
         ? MediaSessionController.prototype(
             initialHasMedia: widget.state != PrototypeState.empty,
             initialDropOverlayVisible: widget.showDropOverlay,
+            sourcePicker:
+                widget.fileSelection ??
+                const PrototypeFileSelection(
+                  sourcePath: 'prototype:///ScreenRecording_08-13-2026.mov',
+                ),
           )
         : MediaSessionController(
             probeService: probeService,
+            sourcePicker: widget.fileSelection,
             candidatePath: widget.previewSource,
             initialDropOverlayVisible: widget.showDropOverlay,
           );
@@ -137,10 +163,12 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
             ? ConversionController.prototype(
                 initiallyConverting: widget.state == PrototypeState.converting,
                 autoAdvanceProgress: widget.autoAdvanceProgress,
+                directoryPicker: widget.fileSelection,
               )
             : ConversionController(
                 service: conversionService,
                 outputPathService: probeService!,
+                directoryPicker: widget.fileSelection,
               ));
     final windowClosePort = widget.windowClosePort;
     if (windowClosePort != null) {
@@ -150,11 +178,20 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
       );
       unawaited(_windowCloseCoordinator!.attach());
     }
-    _settings = SettingsPrototypeController(
+    _settings = SettingsController(
+      store: widget.settingsStore ?? MemorySettingsStore(),
+      systemLocales:
+          widget.systemLocales ??
+          WidgetsBinding.instance.platformDispatcher.locales,
       initiallyOpen: widget.showSettingsPopover,
     );
+    _dropSource = DesktopDropSourceCoordinator();
+    unawaited(_settings.load());
     _mediaSession.addListener(_handleMediaSessionChange);
     _preview.addListener(_handlePreviewChange);
+    _conversion.addListener(_handleConversionChange);
+    _settings.addListener(_handleSettingsChange);
+    _handleConversionChange();
     final initialMedia = _mediaSession.media;
     if (initialMedia != null) {
       _conversion.setMedia(initialMedia);
@@ -171,9 +208,17 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
   void _handleMediaSessionChange() {
     final media = _mediaSession.media;
     if (media == null) {
+      if (_conversionSourcePath != null) {
+        unawaited(_dropSource.release());
+        _conversion.clearMedia();
+        _conversionSourcePath = null;
+        _timelineSourcePath = null;
+        _replacePreviewWithPlaceholder();
+      }
       return;
     }
     if (media.path != _conversionSourcePath) {
+      unawaited(_dropSource.release());
       _conversion.setMedia(media);
       _conversionSourcePath = media.path;
     }
@@ -199,6 +244,28 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
     previousPreview.dispose();
   }
 
+  void _handleConversionChange() {
+    _mediaSession.setSourceChangesAllowed(!_conversion.converting);
+  }
+
+  void _handleSettingsChange() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _replacePreviewWithPlaceholder() {
+    final previousPreview = _preview;
+    previousPreview.removeListener(_handlePreviewChange);
+    setState(() {
+      _preview = PreviewPrototypeController();
+      _nativePreviewSurface = null;
+      _previewSourcePath = null;
+    });
+    _preview.addListener(_handlePreviewChange);
+    previousPreview.dispose();
+  }
+
   void _handlePreviewChange() {
     _timeline.setPlayhead(_preview.positionMs);
   }
@@ -207,7 +274,10 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
   void dispose() {
     _mediaSession.removeListener(_handleMediaSessionChange);
     _preview.removeListener(_handlePreviewChange);
+    _conversion.removeListener(_handleConversionChange);
+    _settings.removeListener(_handleSettingsChange);
     _settings.dispose();
+    unawaited(_dropSource.close());
     final windowCloseCoordinator = _windowCloseCoordinator;
     if (windowCloseCoordinator != null) {
       unawaited(windowCloseCoordinator.detach());
@@ -228,21 +298,32 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
       _conversion,
       _settings,
     ]);
+    final brightness = _settings.effectiveBrightness(
+      widget.platformBrightness ??
+          WidgetsBinding.instance.platformDispatcher.platformBrightness,
+    );
+    MfPalette.activate(brightness);
     return ShadApp(
       title: 'MediaForge',
-      theme: MfTheme.dark,
+      theme: MfTheme.light,
       darkTheme: MfTheme.dark,
-      themeMode: ThemeMode.dark,
+      themeMode: brightness == Brightness.dark
+          ? ThemeMode.dark
+          : ThemeMode.light,
       home: ListenableBuilder(
         listenable: presentationState,
         builder: (BuildContext context, Widget? child) {
-          return MediaForgePrototypeScreen(
-            mediaSession: _mediaSession,
-            preview: _preview,
-            timeline: _timeline,
-            conversion: _conversion,
-            settings: _settings,
-            nativePreviewSurface: _nativePreviewSurface,
+          return MfStringsScope(
+            strings: MfStrings(_settings.effectiveLanguage),
+            child: MediaForgePrototypeScreen(
+              mediaSession: _mediaSession,
+              preview: _preview,
+              timeline: _timeline,
+              conversion: _conversion,
+              settings: _settings,
+              dropSource: _dropSource,
+              nativePreviewSurface: _nativePreviewSurface,
+            ),
           );
         },
       ),

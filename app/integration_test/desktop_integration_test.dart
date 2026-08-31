@@ -9,12 +9,15 @@ import 'package:mediaforge/bridge/api/handshake.dart';
 import 'package:mediaforge/bridge/api/media.dart' as bridge;
 import 'package:mediaforge/src/bridge_runtime.dart';
 import 'package:mediaforge/src/conversion_service.dart';
+import 'package:mediaforge/src/file_selection.dart';
 import 'package:mediaforge/src/media_kit_preview.dart';
 import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/mediaforge_app.dart';
 import 'package:mediaforge/src/mf_timeline.dart';
+import 'package:mediaforge/src/mf_tokens.dart';
 import 'package:mediaforge/src/preview_controller.dart';
 import 'package:mediaforge/src/prototype_state.dart';
+import 'package:mediaforge/src/settings_controller.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -452,18 +455,48 @@ void main() {
     expect(find.byKey(const Key('start-conversion')), findsOneWidget);
   });
 
-  testWidgets('macOS runner replaces the fake source', (
+  testWidgets('macOS runner clears and reopens the fake source', (
     WidgetTester tester,
   ) async {
     await _mountLoadedPrototype(tester);
 
-    await tester.tap(find.byKey(const Key('replace-source')));
+    await tester.tap(find.byKey(const Key('clear-source')));
     await _pumpPrototypeMotion(tester);
-    expect(find.byKey(const Key('drop-overlay')), findsOneWidget);
+    expect(find.byKey(const Key('empty-drop-zone')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('accept-drop')));
+    await tester.tap(find.byKey(const Key('open-media')));
     await _pumpPrototypeMotion(tester);
     expect(find.byKey(const Key('conversion-pane')), findsOneWidget);
+  });
+
+  testWidgets('macOS runner applies bilingual light settings', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 780);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(
+      MediaForgePrototypeApp(
+        state: PrototypeState.loaded,
+        fileSelection: const PrototypeFileSelection(
+          sourcePath: 'prototype:///replacement.mov',
+        ),
+        settingsStore: MemorySettingsStore(),
+        systemLocales: const <Locale>[Locale('en', 'US')],
+        platformBrightness: Brightness.dark,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('settings-button')));
+    await _pumpPrototypeMotion(tester);
+    await tester.tap(find.byKey(const Key('theme-light')));
+    await tester.tap(find.byKey(const Key('language-traditionalChinese')));
+    await _pumpPrototypeMotion(tester);
+
+    expect(find.text('介面設定'), findsOneWidget);
+    expect(find.text('輸出模式'), findsOneWidget);
+    expect(MfPalette.background, MfLightPalette.background);
   });
 
   testWidgets('macOS workspace composes native preview at desktop size', (
@@ -591,7 +624,11 @@ Future<void> _mountLoadedPrototype(WidgetTester tester) async {
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.view.resetPhysicalSize);
   await tester.pumpWidget(
-    const MediaForgePrototypeApp(state: PrototypeState.loaded),
+    const MediaForgePrototypeApp(
+      state: PrototypeState.loaded,
+      systemLocales: <Locale>[Locale('en', 'US')],
+      platformBrightness: Brightness.dark,
+    ),
   );
   await _pumpPrototypeMotion(tester);
 }

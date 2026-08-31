@@ -4,13 +4,16 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mediaforge/src/conversion_controller.dart';
 import 'package:mediaforge/src/conversion_service.dart';
+import 'package:mediaforge/src/file_selection.dart';
 import 'package:mediaforge/src/media_metadata.dart';
 import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/mediaforge_app.dart';
 import 'package:mediaforge/src/mf_icon.dart';
 import 'package:mediaforge/src/mf_timeline.dart';
+import 'package:mediaforge/src/mf_tokens.dart';
 import 'package:mediaforge/src/preview_controller.dart';
 import 'package:mediaforge/src/prototype_state.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 void main() {
   const supportedSizes = <Size>[
@@ -67,9 +70,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('settings-popover')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('theme-dark')));
+    await tester.tap(find.byKey(const Key('theme-light')));
     await tester.tap(find.byKey(const Key('language-traditionalChinese')));
     await tester.pumpAndSettle();
+    expect(find.text('介面設定'), findsOneWidget);
+    expect(MfPalette.background, MfLightPalette.background);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byKey(const Key('close-settings')));
@@ -200,7 +205,7 @@ void main() {
     await service.close();
   });
 
-  testWidgets('source replacement overlay supports cancel and commit', (
+  testWidgets('source can be replaced, cleared, and selected again', (
     WidgetTester tester,
   ) async {
     await _setSurfaceSize(tester, const Size(1200, 780));
@@ -210,37 +215,110 @@ void main() {
 
     await tester.tap(find.byKey(const Key('replace-source')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('drop-overlay')), findsOneWidget);
-    expect(find.text('Drop to replace the current source'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('cancel-drop')));
-    await tester.pumpAndSettle();
     expect(find.byKey(const Key('drop-overlay')), findsNothing);
-
-    await tester.tap(find.byKey(const Key('replace-source')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('accept-drop')));
-    await tester.pumpAndSettle();
     expect(find.byKey(const Key('conversion-pane')), findsOneWidget);
-    expect(find.byKey(const Key('drop-overlay')), findsNothing);
-  });
 
-  testWidgets('empty session commits fake media through the drop overlay', (
-    WidgetTester tester,
-  ) async {
-    await _setSurfaceSize(tester, const Size(1040, 680));
-    await tester.pumpWidget(
-      const MediaForgePrototypeApp(state: PrototypeState.empty),
-    );
+    await tester.tap(find.byKey(const Key('clear-source')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('empty-drop-zone')), findsOneWidget);
+    expect(find.byKey(const Key('conversion-pane')), findsNothing);
 
     await tester.tap(find.byKey(const Key('open-media')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('drop-overlay')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('accept-drop')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('empty-drop-zone')), findsNothing);
     expect(find.byKey(const Key('conversion-pane')), findsOneWidget);
+  });
+
+  testWidgets(
+    'empty session commits fake media through the native picker edge',
+    (WidgetTester tester) async {
+      await _setSurfaceSize(tester, const Size(1040, 680));
+      await tester.pumpWidget(
+        const MediaForgePrototypeApp(state: PrototypeState.empty),
+      );
+
+      await tester.tap(find.byKey(const Key('open-media')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('empty-drop-zone')), findsNothing);
+      expect(find.byKey(const Key('conversion-pane')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'destination filename validates and directory selection applies',
+    (WidgetTester tester) async {
+      await _setSurfaceSize(tester, const Size(1200, 780));
+      await tester.pumpWidget(
+        const MediaForgePrototypeApp(
+          state: PrototypeState.loaded,
+          fileSelection: PrototypeFileSelection(
+            sourcePath: 'prototype:///replacement.mov',
+            directoryPath: '/exports',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('choose-output-directory')));
+      await tester.pumpAndSettle();
+      expect(find.text('/exports'), findsOneWidget);
+
+      final filename = find.descendant(
+        of: find.byKey(const Key('output-filename')),
+        matching: find.byType(EditableText),
+      );
+      await tester.enterText(filename, 'invalid.mp3');
+      await tester.pump();
+      expect(
+        find.text('The extension does not match the output mode'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<ShadButton>(find.byKey(const Key('start-conversion')))
+            .onPressed,
+        isNull,
+      );
+      await tester.enterText(filename, 'custom.mp4');
+      await tester.pump();
+      expect(find.byKey(const Key('destination-error')), findsNothing);
+    },
+  );
+
+  testWidgets('overwrite requires explicit confirmation before retry', (
+    WidgetTester tester,
+  ) async {
+    await _setSurfaceSize(tester, const Size(1200, 780));
+    final service = _WidgetConversionService(rejectExistingOutput: true);
+    final conversion = ConversionController(
+      service: service,
+      outputPathService: const _WidgetProbeService(),
+    );
+    await tester.pumpWidget(
+      MediaForgePrototypeApp(
+        state: PrototypeState.loaded,
+        conversionController: conversion,
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('start-conversion')));
+    await tester.pump();
+    expect(find.byKey(const Key('overwrite-dialog')), findsOneWidget);
+    expect(service.requests.single.overwrite, isFalse);
+    await tester.tap(find.byKey(const Key('confirm-overwrite')));
+    await tester.pump();
+    expect(service.requests.last.overwrite, isTrue);
+    expect(find.byKey(const Key('overwrite-dialog')), findsNothing);
+
+    service.emit(
+      const ConversionJobEvent(
+        kind: ConversionJobEventKind.cancelled,
+        jobId: 9,
+      ),
+    );
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await service.close();
   });
 
   testWidgets('preview play controls expose pressed state changes', (
@@ -458,15 +536,26 @@ class _TrackingPreviewController extends PreviewController {
 }
 
 class _WidgetConversionService implements ConversionService {
+  _WidgetConversionService({this.rejectExistingOutput = false});
+
+  final bool rejectExistingOutput;
   final StreamController<ConversionJobEvent> _events =
       StreamController<ConversionJobEvent>.broadcast();
   final List<int> cancelledJobIds = <int>[];
+  final List<ConversionRequest> requests = <ConversionRequest>[];
 
   @override
   Stream<ConversionJobEvent> get jobEvents => _events.stream;
 
   @override
   Future<ConversionJobSnapshot> start(ConversionRequest request) async {
+    requests.add(request);
+    if (rejectExistingOutput && !request.overwrite) {
+      throw const ConversionFailure(
+        code: ConversionErrorCode.outputExists,
+        diagnostic: 'destination already exists',
+      );
+    }
     return ConversionJobSnapshot(
       jobId: 9,
       state: ConversionJobState.preparing,

@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mediaforge/src/conversion_controller.dart';
+import 'package:mediaforge/src/file_selection.dart';
 import 'package:mediaforge/src/media_metadata.dart';
 import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/media_session_controller.dart';
 import 'package:mediaforge/src/prototype_controllers.dart';
+import 'package:mediaforge/src/settings_controller.dart';
 import 'package:mediaforge/src/timeline_controller.dart';
 
 void main() {
@@ -40,6 +43,41 @@ void main() {
     expect(await controller.replaceSource('/invalid.mov'), isFalse);
     expect(controller.media?.path, '/old.mov');
     expect(controller.failure?.code, MediaProbeErrorCode.unsupportedInput);
+  });
+
+  test('picker cancellation preserves the committed source', () async {
+    final service = _ControlledProbeService();
+    final controller = MediaSessionController(
+      probeService: service,
+      sourcePicker: const PrototypeFileSelection(sourcePath: null),
+      initialMedia: _media('/old.mov'),
+    );
+    addTearDown(controller.dispose);
+
+    expect(await controller.chooseSource(), isFalse);
+    expect(controller.media?.path, '/old.mov');
+    expect(controller.failure, isNull);
+  });
+
+  test('clear invalidates probing and respects the conversion lock', () async {
+    final service = _ControlledProbeService();
+    final pending = Completer<MediaMetadata>();
+    service.pending['/next.mov'] = pending;
+    final controller = MediaSessionController(
+      probeService: service,
+      initialMedia: _media('/old.mov'),
+    );
+    addTearDown(controller.dispose);
+
+    final replacement = controller.replaceSource('/next.mov');
+    expect(controller.clearSource(), isTrue);
+    pending.complete(_media('/next.mov'));
+    expect(await replacement, isFalse);
+    expect(controller.hasMedia, isFalse);
+
+    controller.setSourceChangesAllowed(false);
+    expect(controller.clearSource(), isFalse);
+    expect(await controller.replaceSource('/blocked.mov'), isFalse);
   });
 
   test('superseded probe cannot overwrite the newest source', () async {
@@ -175,19 +213,33 @@ void main() {
     expect(controller.mode, MediaOutputMode.audioOnly);
   });
 
-  test('settings popover and choices remain focused presentation state', () {
-    final controller = SettingsPrototypeController();
+  test('settings persist choices and resolve locale fallback', () async {
+    final store = MemorySettingsStore();
+    final controller = SettingsController(
+      store: store,
+      systemLocales: const <Locale>[Locale('fr', 'FR')],
+    );
     addTearDown(controller.dispose);
 
     controller.togglePopover();
-    controller.selectTheme(PrototypeThemePreference.dark);
-    controller.selectLanguage(PrototypeLanguagePreference.traditionalChinese);
+    await controller.selectTheme(MfThemePreference.dark);
+    await controller.selectLanguage(MfLanguagePreference.traditionalChinese);
 
     expect(controller.popoverOpen, isTrue);
-    expect(controller.theme, PrototypeThemePreference.dark);
-    expect(controller.language, PrototypeLanguagePreference.traditionalChinese);
+    expect(controller.theme, MfThemePreference.dark);
+    expect(controller.language, MfLanguagePreference.traditionalChinese);
+    expect(controller.effectiveLanguage, MfLanguage.traditionalChinese);
+    expect(store.values['mediaforge.theme'], 'dark');
+    expect(store.values['mediaforge.language'], 'traditionalChinese');
     controller.closePopover();
     expect(controller.popoverOpen, isFalse);
+
+    final fallback = SettingsController(
+      store: MemorySettingsStore(),
+      systemLocales: const <Locale>[Locale('fr', 'FR')],
+    );
+    addTearDown(fallback.dispose);
+    expect(fallback.effectiveLanguage, MfLanguage.english);
   });
 }
 

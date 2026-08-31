@@ -7,6 +7,8 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
+  desktop_drop: 0.7.1
+  file_picker: 11.0.3
   flutter:
     sdk: flutter
   flutter_rust_bridge: 2.12.0
@@ -17,6 +19,7 @@ dependencies:
   mediaforge_flutter_bridge:
     path: rust_builder
   shadcn_ui: 0.56.1
+  shared_preferences: 2.5.5
   window_manager: 0.5.2
 
 dev_dependencies:

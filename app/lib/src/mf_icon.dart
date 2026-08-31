@@ -23,12 +23,7 @@ enum MfIconData {
 /// Renders a Lineicons SVG with caller-controlled size and color.
 class MfIcon extends StatelessWidget {
   /// Creates an icon from a repository-owned Lineicons asset.
-  const MfIcon(
-    this.icon, {
-    super.key,
-    this.size = 20,
-    this.color = MfPalette.foreground,
-  });
+  const MfIcon(this.icon, {super.key, this.size = 20, this.color});
 
   /// Icon asset to render.
   final MfIconData icon;
@@ -37,7 +32,7 @@ class MfIcon extends StatelessWidget {
   final double size;
 
   /// Color applied to every SVG path.
-  final Color color;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +40,10 @@ class MfIcon extends StatelessWidget {
       'assets/icons/${icon.fileName}',
       width: size,
       height: size,
-      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      colorFilter: ColorFilter.mode(
+        color ?? MfPalette.foreground,
+        BlendMode.srcIn,
+      ),
     );
   }
 }

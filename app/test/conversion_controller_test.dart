@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mediaforge/src/conversion_controller.dart';
 import 'package:mediaforge/src/conversion_service.dart';
+import 'package:mediaforge/src/file_selection.dart';
 import 'package:mediaforge/src/media_metadata.dart';
 import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/window_close_coordinator.dart';
@@ -224,6 +225,93 @@ void main() {
     );
     await _drainEvents();
   });
+
+  test('destination directory and filename remain mode-safe', () async {
+    final conversionService = _FakeConversionService();
+    final controller = ConversionController(
+      service: conversionService,
+      outputPathService: const _ModeProbeService(),
+      directoryPicker: const PrototypeFileSelection(
+        sourcePath: null,
+        directoryPath: '/exports',
+      ),
+    );
+    addTearDown(() async {
+      await controller.close();
+      controller.dispose();
+      await conversionService.close();
+    });
+    controller.setMedia(_media());
+    await _drainEvents();
+
+    expect(controller.outputDirectory, '/tmp');
+    expect(controller.outputFileName, 'source.mp4');
+    expect(await controller.chooseOutputDirectory(), isTrue);
+    expect(controller.outputPath, '/exports/source.mp4');
+
+    controller.setOutputFileName('../source.mp4');
+    expect(
+      controller.destinationError,
+      DestinationValidationError.pathSeparator,
+    );
+    expect(controller.canStart, isFalse);
+    controller.setOutputFileName('source.mp3');
+    expect(
+      controller.destinationError,
+      DestinationValidationError.wrongExtension,
+    );
+    controller.setOutputFileName('custom.mp4');
+    expect(controller.outputPath, '/exports/custom.mp4');
+
+    controller.selectMode(MediaOutputMode.audioOnly);
+    await _drainEvents();
+    expect(controller.outputDirectory, '/exports');
+    expect(controller.outputFileName, 'source.mp3');
+    expect(controller.outputPath, '/exports/source.mp3');
+  });
+
+  test(
+    'existing output retries only after explicit overwrite approval',
+    () async {
+      final conversionService = _FakeConversionService(
+        startFailures: <ConversionFailure>[
+          const ConversionFailure(
+            code: ConversionErrorCode.outputExists,
+            diagnostic: 'destination already exists',
+          ),
+        ],
+      );
+      final controller = ConversionController(
+        service: conversionService,
+        outputPathService: _FakeProbeService('/tmp/source.mp4'),
+      );
+      addTearDown(() async {
+        await controller.close();
+        controller.dispose();
+        await conversionService.close();
+      });
+      controller.setMedia(_media());
+      await _drainEvents();
+
+      await controller.start(startMs: 100, endMs: 1200);
+      expect(controller.overwriteConfirmationRequired, isTrue);
+      expect(conversionService.requests.single.overwrite, isFalse);
+
+      await controller.confirmOverwrite();
+      expect(controller.overwriteConfirmationRequired, isFalse);
+      expect(conversionService.requests.last.overwrite, isTrue);
+      expect(conversionService.requests.last.startMs, 100);
+      expect(conversionService.requests.last.endMs, 1200);
+      conversionService.emit(
+        const ConversionJobEvent(
+          kind: ConversionJobEventKind.completed,
+          jobId: 7,
+          outputPath: '/tmp/source.mp4',
+        ),
+      );
+      await _drainEvents();
+    },
+  );
 
   test(
     'new audiovisual source restores its authoritative default mode',
@@ -517,10 +605,15 @@ MediaMetadata _media() {
 }
 
 class _FakeConversionService implements ConversionService {
-  _FakeConversionService({this.delayStart = false, this.cancelFailure});
+  _FakeConversionService({
+    this.delayStart = false,
+    this.cancelFailure,
+    List<ConversionFailure>? startFailures,
+  }) : startFailures = <ConversionFailure>[...?startFailures];
 
   final bool delayStart;
   final ConversionFailure? cancelFailure;
+  final List<ConversionFailure> startFailures;
   final StreamController<ConversionJobEvent> _events =
       StreamController<ConversionJobEvent>.broadcast();
   final List<ConversionRequest> requests = <ConversionRequest>[];
@@ -533,6 +626,9 @@ class _FakeConversionService implements ConversionService {
   @override
   Future<ConversionJobSnapshot> start(ConversionRequest request) {
     requests.add(request);
+    if (startFailures.isNotEmpty) {
+      return Future<ConversionJobSnapshot>.error(startFailures.removeAt(0));
+    }
     if (delayStart) {
       return (_pendingStart ??= Completer<ConversionJobSnapshot>()).future;
     }
@@ -590,6 +686,27 @@ class _FakeProbeService implements MediaProbeService {
   @override
   Future<String> defaultOutputPath(String path, MediaOutputMode mode) async =>
       outputPath;
+
+  @override
+  Future<MediaBackendCapabilities> initializeBackend() async {
+    return const MediaBackendCapabilities(
+      ffmpegVersion: 'fake',
+      h264Available: true,
+      aacAvailable: true,
+      mp3Available: true,
+    );
+  }
+
+  @override
+  Future<MediaMetadata> probe(String path) async => _media();
+}
+
+class _ModeProbeService implements MediaProbeService {
+  const _ModeProbeService();
+
+  @override
+  Future<String> defaultOutputPath(String path, MediaOutputMode mode) async =>
+      mode == MediaOutputMode.audioOnly ? '/tmp/source.mp3' : '/tmp/source.mp4';
 
   @override
   Future<MediaBackendCapabilities> initializeBackend() async {

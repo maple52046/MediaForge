@@ -224,20 +224,15 @@ class RustConversionService implements ConversionService {
   /// Creates the process-wide native conversion adapter.
   const RustConversionService();
 
+  // Invariant: FRB owns one native event sink for the process; Flutter
+  // controllers may attach and detach without replacing that sink.
+  static final Stream<ConversionJobEvent> _processJobEvents = bridge
+      .jobEvents()
+      .map(_fromBridgeJobEvent)
+      .asBroadcastStream(onCancel: (_) {});
+
   @override
-  Stream<ConversionJobEvent> get jobEvents => bridge.jobEvents().map(
-    (bridge.JobEventDto event) => ConversionJobEvent(
-      kind: _fromBridgeEventKind(event.kind),
-      jobId: event.jobId,
-      percent: event.percent,
-      processedMs: event.processedMs,
-      totalMs: event.totalMs,
-      framesPerSecond: event.framesPerSecond,
-      speed: event.speed,
-      outputPath: event.outputPath,
-      failure: event.error == null ? null : _mapBridgeFailure(event.error!),
-    ),
-  );
+  Stream<ConversionJobEvent> get jobEvents => _processJobEvents;
 
   @override
   Future<ConversionJobSnapshot> start(ConversionRequest request) async {
@@ -273,6 +268,19 @@ class RustConversionService implements ConversionService {
     }
   }
 }
+
+ConversionJobEvent _fromBridgeJobEvent(bridge.JobEventDto event) =>
+    ConversionJobEvent(
+      kind: _fromBridgeEventKind(event.kind),
+      jobId: event.jobId,
+      percent: event.percent,
+      processedMs: event.processedMs,
+      totalMs: event.totalMs,
+      framesPerSecond: event.framesPerSecond,
+      speed: event.speed,
+      outputPath: event.outputPath,
+      failure: event.error == null ? null : _mapBridgeFailure(event.error!),
+    );
 
 bridge.MediaOutputMode _toBridgeMode(MediaOutputMode mode) => switch (mode) {
   MediaOutputMode.videoWithAudio => bridge.MediaOutputMode.videoWithAudio,

@@ -3,8 +3,27 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'conversion_service.dart';
+import 'file_selection.dart';
 import 'media_metadata.dart';
 import 'media_probe_service.dart';
+
+/// Stable reasons an editable destination cannot be submitted.
+enum DestinationValidationError {
+  /// No destination directory is selected.
+  emptyDirectory,
+
+  /// The filename contains no visible characters.
+  emptyFilename,
+
+  /// The filename attempts to include a directory component.
+  pathSeparator,
+
+  /// The filename extension does not match the selected output recipe.
+  wrongExtension,
+
+  /// The destination resolves to the selected source path.
+  sourceCollision,
+}
 
 /// Owns output selection and one conversion lifecycle at the Flutter edge.
 class ConversionController extends ChangeNotifier {
@@ -12,9 +31,11 @@ class ConversionController extends ChangeNotifier {
   ConversionController({
     required ConversionService service,
     required MediaProbeService outputPathService,
+    DestinationDirectoryPicker? directoryPicker,
   }) : this._(
          service: service,
          outputPathService: outputPathService,
+         directoryPicker: directoryPicker,
          supportedModes: MediaOutputMode.values,
        );
 
@@ -22,15 +43,18 @@ class ConversionController extends ChangeNotifier {
   ConversionController.prototype({
     bool initiallyConverting = false,
     bool autoAdvanceProgress = false,
+    DestinationDirectoryPicker? directoryPicker,
   }) : this._(
          initiallyConverting: initiallyConverting,
          autoAdvanceProgress: autoAdvanceProgress,
+         directoryPicker: directoryPicker,
          supportedModes: MediaOutputMode.values,
        );
 
   ConversionController._({
     this._service,
     this._outputPathService,
+    this._directoryPicker,
     required List<MediaOutputMode> supportedModes,
     bool initiallyConverting = false,
     this.autoAdvanceProgress = false,
@@ -54,6 +78,7 @@ class ConversionController extends ChangeNotifier {
 
   final ConversionService? _service;
   final MediaProbeService? _outputPathService;
+  final DestinationDirectoryPicker? _directoryPicker;
   final List<MediaOutputMode> _supportedModes;
 
   /// Whether prototype progress advances on a deterministic timer.
@@ -74,12 +99,18 @@ class ConversionController extends ChangeNotifier {
   double? _framesPerSecond;
   double? _speed;
   String? _outputPath;
+  String? _outputDirectory;
+  String? _outputFileName;
+  DestinationValidationError? _destinationError;
+  bool _directoryCustomized = false;
   String? _completedOutputPath;
   ConversionFailure? _failure;
   int? _activeJobId;
   int _destinationGeneration = 0;
   final List<ConversionJobEvent> _earlyEvents = <ConversionJobEvent>[];
   Completer<void>? _terminalCompleter;
+  ConversionRequest? _pendingOverwriteRequest;
+  ConversionRequest? _lastStartRequest;
   bool _closed = false;
   bool _disposed = false;
   Future<void>? _closeFuture;
@@ -120,6 +151,18 @@ class ConversionController extends ChangeNotifier {
   /// Backend-proposed destination for the current source and mode.
   String? get outputPath => _outputPath;
 
+  /// Selected destination directory shown independently from the filename.
+  String? get outputDirectory => _outputDirectory;
+
+  /// Editable destination filename, including its mode-specific extension.
+  String? get outputFileName => _outputFileName;
+
+  /// Stable validation reason that prevents an invalid destination from starting.
+  DestinationValidationError? get destinationError => _destinationError;
+
+  /// Whether an existing destination awaits explicit overwrite approval.
+  bool get overwriteConfirmationRequired => _pendingOverwriteRequest != null;
+
   /// Most recent destination committed by a completed job.
   String? get completedOutputPath => _completedOutputPath;
 
@@ -129,6 +172,8 @@ class ConversionController extends ChangeNotifier {
   /// Whether the current source and destination can start a conversion.
   bool get canStart =>
       !_converting &&
+      _pendingOverwriteRequest == null &&
+      _destinationError == null &&
       _availableModes.contains(_mode) &&
       (_service == null || (_media != null && _outputPath != null));
 
@@ -150,10 +195,16 @@ class ConversionController extends ChangeNotifier {
     _speed = null;
     _completedOutputPath = null;
     _failure = null;
+    _pendingOverwriteRequest = null;
+    _lastStartRequest = null;
+    _directoryCustomized = false;
     _applyAvailableModes(media.availableOutputModes, resetSelection: true);
     final generation = ++_destinationGeneration;
     if (_service != null && _availableModes.isEmpty) {
       _outputPath = null;
+      _outputDirectory = null;
+      _outputFileName = null;
+      _destinationError = null;
       _failure = const ConversionFailure(
         code: ConversionErrorCode.unsupportedInput,
         diagnostic: 'The source does not expose a supported output mode.',
@@ -162,11 +213,14 @@ class ConversionController extends ChangeNotifier {
       return;
     }
     if (_service == null) {
-      _outputPath = _prototypeOutputPath(media, _mode);
+      _applyResolvedOutputPath(_prototypeOutputPath(media, _mode));
       _notifyListeners();
       return;
     }
     _outputPath = null;
+    _outputDirectory = null;
+    _outputFileName = null;
+    _destinationError = null;
     _notifyListeners();
     if (_availableModes.isNotEmpty) {
       unawaited(_resolveOutputPath(media, _mode, generation));
@@ -181,16 +235,19 @@ class ConversionController extends ChangeNotifier {
     _mode = mode;
     _completedOutputPath = null;
     _failure = null;
+    _pendingOverwriteRequest = null;
     final media = _media;
     final generation = ++_destinationGeneration;
     if (_service == null || media == null) {
       if (media != null) {
-        _outputPath = _prototypeOutputPath(media, mode);
+        _applyResolvedOutputPath(_prototypeOutputPath(media, mode));
       }
       _notifyListeners();
       return;
     }
     _outputPath = null;
+    _outputFileName = null;
+    _destinationError = null;
     _notifyListeners();
     unawaited(_resolveOutputPath(media, mode, generation));
   }
@@ -204,6 +261,76 @@ class ConversionController extends ChangeNotifier {
     _completedOutputPath = null;
     _failure = null;
     _notifyListeners();
+  }
+
+  /// Removes source and destination state after the media session is cleared.
+  void clearMedia() {
+    if (_converting || _closed) {
+      return;
+    }
+    _media = null;
+    _availableModes = const <MediaOutputMode>[];
+    _outputPath = null;
+    _outputDirectory = null;
+    _outputFileName = null;
+    _destinationError = null;
+    _directoryCustomized = false;
+    _completedOutputPath = null;
+    _failure = null;
+    _pendingOverwriteRequest = null;
+    _lastStartRequest = null;
+    _destinationGeneration += 1;
+    _notifyListeners();
+  }
+
+  /// Applies an editable filename and revalidates the complete destination.
+  void setOutputFileName(String fileName) {
+    if (_converting || _closed || _outputFileName == fileName) {
+      return;
+    }
+    _outputFileName = fileName;
+    _completedOutputPath = null;
+    _failure = null;
+    _pendingOverwriteRequest = null;
+    _rebuildOutputPath();
+    _notifyListeners();
+  }
+
+  /// Opens the native directory picker and retains the current filename.
+  Future<bool> chooseOutputDirectory() async {
+    if (_converting || _closed) {
+      return false;
+    }
+    final picker = _directoryPicker;
+    if (picker == null) {
+      return false;
+    }
+    try {
+      final directory = await picker.pickDestinationDirectory(
+        initialDirectory: _outputDirectory,
+      );
+      if (_disposed || _converting || _closed || directory == null) {
+        return false;
+      }
+      _outputDirectory = directory;
+      _directoryCustomized = true;
+      _completedOutputPath = null;
+      _failure = null;
+      _pendingOverwriteRequest = null;
+      _rebuildOutputPath();
+      _notifyListeners();
+      return true;
+    } on Object catch (error) {
+      if (_disposed || _closed) {
+        return false;
+      }
+      _failure = ConversionFailure(
+        code: ConversionErrorCode.unexpected,
+        diagnostic: error.toString(),
+      );
+      _notifyListeners();
+      return false;
+    }
   }
 
   /// Replaces mode availability in deterministic presentation-only tests.
@@ -244,12 +371,59 @@ class ConversionController extends ChangeNotifier {
       return;
     }
 
+    await _startRequest(
+      ConversionRequest(
+        inputPath: media.path,
+        outputPath: outputPath,
+        mode: _mode,
+        audioQuality: _audioQuality,
+        startMs: startMs,
+        endMs: endMs,
+        overwrite: false,
+      ),
+    );
+  }
+
+  /// Retries the exact rejected request with explicit overwrite authorization.
+  Future<void> confirmOverwrite() async {
+    final request = _pendingOverwriteRequest;
+    if (request == null || _converting || _closed) {
+      return;
+    }
+    _pendingOverwriteRequest = null;
+    await _startRequest(
+      ConversionRequest(
+        inputPath: request.inputPath,
+        outputPath: request.outputPath,
+        mode: request.mode,
+        audioQuality: request.audioQuality,
+        startMs: request.startMs,
+        endMs: request.endMs,
+        overwrite: true,
+      ),
+    );
+  }
+
+  /// Dismisses overwrite recovery without changing the existing destination.
+  void dismissOverwrite() {
+    if (_pendingOverwriteRequest == null) {
+      return;
+    }
+    _pendingOverwriteRequest = null;
+    _failure = null;
+    _notifyListeners();
+  }
+
+  Future<void> _startRequest(ConversionRequest request) async {
+    final service = _service!;
+    _lastStartRequest = request;
+    _pendingOverwriteRequest = null;
     _converting = true;
     _jobState = ConversionJobState.preparing;
     _cancelling = false;
     _progress = 0;
     _processedMs = 0;
-    _totalMs = endMs - startMs;
+    _totalMs = request.endMs - request.startMs;
     _framesPerSecond = null;
     _speed = null;
     _failure = null;
@@ -259,17 +433,7 @@ class ConversionController extends ChangeNotifier {
     _terminalCompleter = Completer<void>();
     _notifyListeners();
     try {
-      final snapshot = await service.start(
-        ConversionRequest(
-          inputPath: media.path,
-          outputPath: outputPath,
-          mode: _mode,
-          audioQuality: _audioQuality,
-          startMs: startMs,
-          endMs: endMs,
-          overwrite: false,
-        ),
-      );
+      final snapshot = await service.start(request);
       if (_closed) {
         return;
       }
@@ -358,7 +522,7 @@ class ConversionController extends ChangeNotifier {
       if (_closed || generation != _destinationGeneration) {
         return;
       }
-      _outputPath = outputPath;
+      _applyResolvedOutputPath(outputPath);
       _notifyListeners();
     } on MediaProbeFailure catch (failure) {
       if (_closed || generation != _destinationGeneration) {
@@ -415,6 +579,8 @@ class ConversionController extends ChangeNotifier {
         _processedMs = _totalMs;
         _completedOutputPath = outputPath;
         _activeJobId = null;
+        _pendingOverwriteRequest = null;
+        _lastStartRequest = null;
         _completeTerminal();
         _notifyListeners();
       case ConversionJobEventKind.cancelled:
@@ -424,6 +590,8 @@ class ConversionController extends ChangeNotifier {
         _progress = 0;
         _failure = null;
         _activeJobId = null;
+        _pendingOverwriteRequest = null;
+        _lastStartRequest = null;
         _completeTerminal();
         _notifyListeners();
       case ConversionJobEventKind.failed:
@@ -511,6 +679,13 @@ class ConversionController extends ChangeNotifier {
     _cancelling = false;
     _progress = 0;
     _failure = failure;
+    final request = _lastStartRequest;
+    _pendingOverwriteRequest =
+        failure.code == ConversionErrorCode.outputExists &&
+            request != null &&
+            !request.overwrite
+        ? request
+        : null;
     _activeJobId = null;
     _earlyEvents.clear();
     _completeTerminal();
@@ -553,6 +728,72 @@ class ConversionController extends ChangeNotifier {
     final dot = media.fileName.lastIndexOf('.');
     final stem = dot > 0 ? media.fileName.substring(0, dot) : media.fileName;
     return '~/Movies/MediaForge/$stem.$extension';
+  }
+
+  void _applyResolvedOutputPath(String outputPath) {
+    final parts = _splitPath(outputPath);
+    if (!_directoryCustomized) {
+      _outputDirectory = parts.directory;
+    }
+    _outputFileName = parts.fileName;
+    _rebuildOutputPath();
+  }
+
+  void _rebuildOutputPath() {
+    final directory = _outputDirectory?.trim();
+    final fileName = _outputFileName?.trim() ?? '';
+    if (directory == null || directory.isEmpty) {
+      _destinationError = DestinationValidationError.emptyDirectory;
+      _outputPath = null;
+      return;
+    }
+    if (fileName.isEmpty) {
+      _destinationError = DestinationValidationError.emptyFilename;
+      _outputPath = null;
+      return;
+    }
+    if (fileName.contains('/') || fileName.contains('\\')) {
+      _destinationError = DestinationValidationError.pathSeparator;
+      _outputPath = null;
+      return;
+    }
+    final extension = _mode == MediaOutputMode.audioOnly ? '.mp3' : '.mp4';
+    if (!fileName.toLowerCase().endsWith(extension)) {
+      _destinationError = DestinationValidationError.wrongExtension;
+      _outputPath = null;
+      return;
+    }
+    final outputPath = _joinPath(directory, fileName);
+    if (outputPath == _media?.path) {
+      _destinationError = DestinationValidationError.sourceCollision;
+      _outputPath = null;
+      return;
+    }
+    _destinationError = null;
+    _outputPath = outputPath;
+  }
+
+  static ({String directory, String fileName}) _splitPath(String path) {
+    final slash = path.lastIndexOf('/');
+    final backslash = path.lastIndexOf('\\');
+    final separator = slash > backslash ? slash : backslash;
+    if (separator < 0) {
+      return (directory: '.', fileName: path);
+    }
+    final directory = separator == 0
+        ? path.substring(0, 1)
+        : path.substring(0, separator);
+    return (directory: directory, fileName: path.substring(separator + 1));
+  }
+
+  static String _joinPath(String directory, String fileName) {
+    if (directory.endsWith('/') || directory.endsWith('\\')) {
+      return '$directory$fileName';
+    }
+    final separator = directory.contains('\\') && !directory.contains('/')
+        ? '\\'
+        : '/';
+    return '$directory$separator$fileName';
   }
 
   ConversionFailure _fromProbeFailure(MediaProbeFailure failure) {

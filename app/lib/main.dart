@@ -4,10 +4,12 @@ import 'package:window_manager/window_manager.dart';
 
 import 'src/bridge_runtime.dart';
 import 'src/conversion_service.dart';
+import 'src/file_selection.dart';
 import 'src/media_probe_service.dart';
 import 'src/mediaforge_app.dart';
 import 'src/mf_tokens.dart';
 import 'src/prototype_state.dart';
+import 'src/settings_controller.dart';
 import 'src/window_close_coordinator.dart';
 
 /// Starts the interactive MediaForge desktop prototype.
@@ -19,7 +21,7 @@ Future<void> main() async {
 
   const compact = bool.fromEnvironment('MEDIAFORGE_COMPACT_WINDOW');
   const large = bool.fromEnvironment('MEDIAFORGE_LARGE_WINDOW');
-  const windowOptions = WindowOptions(
+  final windowOptions = WindowOptions(
     size: compact
         ? Size(1040, 680)
         : large
@@ -27,7 +29,11 @@ Future<void> main() async {
         : Size(1200, 780),
     minimumSize: Size(1040, 680),
     center: true,
-    backgroundColor: MfPalette.background,
+    backgroundColor:
+        WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+            Brightness.light
+        ? MfLightPalette.background
+        : MfDarkPalette.background,
     titleBarStyle: TitleBarStyle.hidden,
     windowButtonVisibility: true,
   );
@@ -58,6 +64,8 @@ Future<void> main() async {
       showDropOverlay: showDropOverlay,
       showSettingsPopover: showSettingsPopover,
       previewSource: previewSource.isEmpty ? null : previewSource,
+      fileSelection: const NativeFileSelection(),
+      settingsStore: SharedPreferencesSettingsStore(),
       mediaProbeService: const RustMediaProbeService(),
       conversionService: const RustConversionService(),
       windowClosePort: WindowManagerClosePort(),

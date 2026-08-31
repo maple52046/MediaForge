@@ -1,30 +1,4 @@
-import 'package:flutter/foundation.dart';
-
 import 'preview_controller.dart';
-
-/// Theme choices displayed by the fake settings popover.
-enum PrototypeThemePreference {
-  /// Follow the operating-system appearance.
-  system,
-
-  /// Request the future light theme.
-  light,
-
-  /// Use the current dark prototype theme.
-  dark,
-}
-
-/// Language choices displayed by the fake settings popover.
-enum PrototypeLanguagePreference {
-  /// Follow the operating-system language.
-  system,
-
-  /// Use Traditional Chinese.
-  traditionalChinese,
-
-  /// Use English.
-  english,
-}
 
 /// Owns deterministic preview values without loading a native player.
 class PreviewPrototypeController extends PreviewController {
@@ -110,59 +84,6 @@ class PreviewPrototypeController extends PreviewController {
       return;
     }
     _volumePercent = next;
-    notifyListeners();
-  }
-}
-
-/// Owns fake popover, theme, and language choices for M2.
-class SettingsPrototypeController extends ChangeNotifier {
-  /// Creates deterministic settings-popover state.
-  SettingsPrototypeController({bool initiallyOpen = false})
-    : _popoverOpen = initiallyOpen;
-
-  bool _popoverOpen;
-  PrototypeThemePreference _theme = PrototypeThemePreference.system;
-  PrototypeLanguagePreference _language = PrototypeLanguagePreference.system;
-
-  /// Whether the settings popover is visible.
-  bool get popoverOpen => _popoverOpen;
-
-  /// Selected fake theme preference.
-  PrototypeThemePreference get theme => _theme;
-
-  /// Selected fake language preference.
-  PrototypeLanguagePreference get language => _language;
-
-  /// Toggles the settings popover.
-  void togglePopover() {
-    _popoverOpen = !_popoverOpen;
-    notifyListeners();
-  }
-
-  /// Closes the settings popover when it is open.
-  void closePopover() {
-    if (!_popoverOpen) {
-      return;
-    }
-    _popoverOpen = false;
-    notifyListeners();
-  }
-
-  /// Selects a fake theme preference.
-  void selectTheme(PrototypeThemePreference theme) {
-    if (_theme == theme) {
-      return;
-    }
-    _theme = theme;
-    notifyListeners();
-  }
-
-  /// Selects a fake language preference.
-  void selectLanguage(PrototypeLanguagePreference language) {
-    if (_language == language) {
-      return;
-    }
-    _language = language;
     notifyListeners();
   }
 }

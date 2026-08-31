@@ -1,20 +1,23 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'conversion_controller.dart';
 import 'conversion_service.dart';
+import 'file_selection.dart';
 import 'media_metadata.dart';
 import 'media_session_controller.dart';
 import 'media_time.dart';
 import 'mf_icon.dart';
+import 'mf_localizations.dart';
 import 'mf_timeline.dart';
 import 'mf_tokens.dart';
 import 'preview_controller.dart';
-import 'prototype_controllers.dart';
+import 'settings_controller.dart';
 import 'timeline_controller.dart';
 
 /// Interactive MediaForge workspace with optional native preview output.
@@ -26,6 +29,7 @@ class MediaForgePrototypeScreen extends StatelessWidget {
     required this.timeline,
     required this.conversion,
     required this.settings,
+    required this.dropSource,
     required this.nativePreviewSurface,
     super.key,
   });
@@ -43,42 +47,60 @@ class MediaForgePrototypeScreen extends StatelessWidget {
   final ConversionController conversion;
 
   /// Fake settings popover state.
-  final SettingsPrototypeController settings;
+  final SettingsController settings;
+
+  /// Retains macOS security-scoped access for the committed dropped source.
+  final DesktopDropSourceCoordinator dropSource;
 
   /// media_kit video widget composed outside the framework-free controller.
   final Widget? nativePreviewSurface;
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: MfPalette.background,
-      child: Stack(
-        children: [
-          Column(
-            children: [
-              _Header(settings: settings),
-              Expanded(
-                child: mediaSession.hasMedia
-                    ? _LoadedWorkspace(
-                        mediaSession: mediaSession,
-                        preview: preview,
-                        nativePreviewSurface: nativePreviewSurface,
-                        timeline: timeline,
-                        conversion: conversion,
-                      )
-                    : _EmptyWorkspace(mediaSession: mediaSession),
-              ),
-            ],
-          ),
-          if (settings.popoverOpen)
-            Positioned(
-              top: 46,
-              right: MfSpacing.md,
-              child: _SettingsPopover(settings: settings),
+    return DropTarget(
+      enable: mediaSession.sourceChangesAllowed,
+      onDragEntered: (_) => mediaSession.showDropOverlay(),
+      onDragExited: (_) => mediaSession.hideDropOverlay(),
+      onDragDone: (DropDoneDetails details) {
+        final item = details.files.firstOrNull;
+        if (item == null) {
+          mediaSession.hideDropOverlay();
+          return;
+        }
+        unawaited(dropSource.commit(item, mediaSession.replaceSource));
+      },
+      child: ColoredBox(
+        color: MfPalette.background,
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                _Header(settings: settings),
+                Expanded(
+                  child: mediaSession.hasMedia
+                      ? _LoadedWorkspace(
+                          mediaSession: mediaSession,
+                          preview: preview,
+                          nativePreviewSurface: nativePreviewSurface,
+                          timeline: timeline,
+                          conversion: conversion,
+                        )
+                      : _EmptyWorkspace(mediaSession: mediaSession),
+                ),
+              ],
             ),
-          if (mediaSession.dropOverlayVisible)
-            Positioned.fill(child: _DropOverlay(mediaSession: mediaSession)),
-        ],
+            if (settings.popoverOpen)
+              Positioned(
+                top: 46,
+                right: MfSpacing.md,
+                child: _SettingsPopover(settings: settings),
+              ),
+            if (mediaSession.dropOverlayVisible)
+              Positioned.fill(child: _DropOverlay(mediaSession: mediaSession)),
+            if (conversion.overwriteConfirmationRequired)
+              Positioned.fill(child: _OverwriteDialog(conversion: conversion)),
+          ],
+        ),
       ),
     );
   }
@@ -87,15 +109,16 @@ class MediaForgePrototypeScreen extends StatelessWidget {
 class _Header extends StatelessWidget {
   const _Header({required this.settings});
 
-  final SettingsPrototypeController settings;
+  final SettingsController settings;
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return Container(
       key: const Key('app-header'),
       height: 52,
       padding: const EdgeInsets.only(left: 84, right: MfSpacing.md),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: MfPalette.surface,
         border: Border(bottom: BorderSide(color: MfPalette.border)),
       ),
@@ -111,7 +134,7 @@ class _Header extends StatelessWidget {
             child: const Center(child: MfIcon(MfIconData.play, size: 15)),
           ),
           const SizedBox(width: MfSpacing.sm),
-          const Text(
+          Text(
             'MediaForge',
             style: TextStyle(
               color: MfPalette.foreground,
@@ -128,7 +151,7 @@ class _Header extends StatelessWidget {
             height: 32,
             padding: const EdgeInsets.symmetric(horizontal: MfSpacing.sm),
             onPressed: settings.togglePopover,
-            child: const Text('Settings'),
+            child: Text(strings.settings),
           ),
         ],
       ),
@@ -141,7 +164,8 @@ class _HeaderStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    final strings = MfStrings.of(context);
+    return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         DecoratedBox(
@@ -153,7 +177,7 @@ class _HeaderStatus extends StatelessWidget {
         ),
         SizedBox(width: MfSpacing.xs),
         Text(
-          'UI prototype',
+          strings.flutterApp,
           style: TextStyle(color: MfPalette.muted, fontSize: 12),
         ),
       ],
@@ -164,10 +188,11 @@ class _HeaderStatus extends StatelessWidget {
 class _SettingsPopover extends StatelessWidget {
   const _SettingsPopover({required this.settings});
 
-  final SettingsPrototypeController settings;
+  final SettingsController settings;
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return Container(
       key: const Key('settings-popover'),
       width: 280,
@@ -190,9 +215,9 @@ class _SettingsPopover extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Interface settings',
+                  strings.interfaceSettings,
                   style: TextStyle(
                     color: MfPalette.foreground,
                     fontSize: 13,
@@ -205,35 +230,35 @@ class _SettingsPopover extends StatelessWidget {
                 height: 28,
                 padding: const EdgeInsets.symmetric(horizontal: MfSpacing.xs),
                 onPressed: settings.closePopover,
-                child: const Text('Close'),
+                child: Text(strings.close),
               ),
             ],
           ),
           const SizedBox(height: MfSpacing.sm),
-          const _SectionLabel('APPEARANCE'),
+          _SectionLabel(strings.appearance),
           const SizedBox(height: MfSpacing.xs),
-          _PopoverChoices<PrototypeThemePreference>(
-            values: PrototypeThemePreference.values,
+          _PopoverChoices<MfThemePreference>(
+            values: MfThemePreference.values,
             selected: settings.theme,
-            labelFor: _themeLabel,
-            keyFor: (PrototypeThemePreference value) =>
-                Key('theme-${value.name}'),
+            labelFor: (MfThemePreference value) => _themeLabel(value, strings),
+            keyFor: (MfThemePreference value) => Key('theme-${value.name}'),
             onSelected: settings.selectTheme,
           ),
           const SizedBox(height: MfSpacing.md),
-          const _SectionLabel('LANGUAGE'),
+          _SectionLabel(strings.languageLabel),
           const SizedBox(height: MfSpacing.xs),
-          _PopoverChoices<PrototypeLanguagePreference>(
-            values: PrototypeLanguagePreference.values,
+          _PopoverChoices<MfLanguagePreference>(
+            values: MfLanguagePreference.values,
             selected: settings.language,
-            labelFor: _languageLabel,
-            keyFor: (PrototypeLanguagePreference value) =>
+            labelFor: (MfLanguagePreference value) =>
+                _languageLabel(value, strings),
+            keyFor: (MfLanguagePreference value) =>
                 Key('language-${value.name}'),
             onSelected: settings.selectLanguage,
           ),
           const SizedBox(height: MfSpacing.sm),
-          const Text(
-            'Prototype choices are not persisted yet.',
+          Text(
+            settings.persistenceDiagnostic ?? strings.preferencesPersisted,
             style: TextStyle(color: MfPalette.faint, fontSize: 10),
           ),
         ],
@@ -241,17 +266,18 @@ class _SettingsPopover extends StatelessWidget {
     );
   }
 
-  static String _themeLabel(PrototypeThemePreference value) => switch (value) {
-    PrototypeThemePreference.system => 'System',
-    PrototypeThemePreference.light => 'Light',
-    PrototypeThemePreference.dark => 'Dark',
-  };
-
-  static String _languageLabel(PrototypeLanguagePreference value) =>
+  static String _themeLabel(MfThemePreference value, MfStrings strings) =>
       switch (value) {
-        PrototypeLanguagePreference.system => 'System',
-        PrototypeLanguagePreference.traditionalChinese => '繁中',
-        PrototypeLanguagePreference.english => 'English',
+        MfThemePreference.system => strings.system,
+        MfThemePreference.light => strings.light,
+        MfThemePreference.dark => strings.dark,
+      };
+
+  static String _languageLabel(MfLanguagePreference value, MfStrings strings) =>
+      switch (value) {
+        MfLanguagePreference.system => strings.system,
+        MfLanguagePreference.traditionalChinese => strings.traditionalChinese,
+        MfLanguagePreference.english => strings.english,
       };
 }
 
@@ -268,7 +294,7 @@ class _PopoverChoices<T> extends StatelessWidget {
   final T selected;
   final String Function(T value) labelFor;
   final Key Function(T value) keyFor;
-  final ValueChanged<T> onSelected;
+  final Future<void> Function(T value) onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -281,7 +307,7 @@ class _PopoverChoices<T> extends StatelessWidget {
               key: keyFor(values[index]),
               label: labelFor(values[index]),
               selected: values[index] == selected,
-              onPressed: () => onSelected(values[index]),
+              onPressed: () async => onSelected(values[index]),
             ),
           ),
         ],
@@ -329,10 +355,11 @@ class _InteractiveDropSurfaceState extends State<_InteractiveDropSurface> {
   @override
   Widget build(BuildContext context) {
     final highlighted = _hovered || _pressed || _focused;
+    final strings = MfStrings.of(context);
     return Semantics(
       button: true,
-      label: 'Open or drop a video or audio file',
-      onTap: widget.mediaSession.showDropOverlay,
+      label: strings.openOrDropSemantics,
+      onTap: widget.mediaSession.chooseSource,
       child: Focus(
         focusNode: _focusNode,
         onFocusChange: (bool focused) => setState(() => _focused = focused),
@@ -340,7 +367,7 @@ class _InteractiveDropSurfaceState extends State<_InteractiveDropSurface> {
           if (event is KeyDownEvent &&
               (event.logicalKey == LogicalKeyboardKey.enter ||
                   event.logicalKey == LogicalKeyboardKey.space)) {
-            widget.mediaSession.showDropOverlay();
+            unawaited(widget.mediaSession.chooseSource());
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
@@ -357,7 +384,7 @@ class _InteractiveDropSurfaceState extends State<_InteractiveDropSurface> {
               behavior: HitTestBehavior.opaque,
               onTap: () {
                 _focusNode.requestFocus();
-                widget.mediaSession.showDropOverlay();
+                unawaited(widget.mediaSession.chooseSource());
               },
               child: AnimatedContainer(
                 key: const Key('empty-drop-zone'),
@@ -390,7 +417,7 @@ class _InteractiveDropSurfaceState extends State<_InteractiveDropSurface> {
                                 ),
                                 border: Border.all(color: MfPalette.border),
                               ),
-                              child: const Center(
+                              child: Center(
                                 child: MfIcon(
                                   MfIconData.upload,
                                   size: 30,
@@ -399,8 +426,8 @@ class _InteractiveDropSurfaceState extends State<_InteractiveDropSurface> {
                               ),
                             ),
                             const SizedBox(height: MfSpacing.xl),
-                            const Text(
-                              'Drop a video or audio file',
+                            Text(
+                              strings.dropMedia,
                               style: TextStyle(
                                 color: MfPalette.foreground,
                                 fontSize: 22,
@@ -409,8 +436,8 @@ class _InteractiveDropSurfaceState extends State<_InteractiveDropSurface> {
                               ),
                             ),
                             const SizedBox(height: MfSpacing.xs),
-                            const Text(
-                              'MOV, MP4, M4A, WAV, and MP3 · one source at a time',
+                            Text(
+                              strings.supportedMediaHint,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: MfPalette.muted,
@@ -422,16 +449,19 @@ class _InteractiveDropSurfaceState extends State<_InteractiveDropSurface> {
                               key: const Key('open-media'),
                               width: 212,
                               height: 38,
-                              onPressed: widget.mediaSession.showDropOverlay,
+                              onPressed: widget.mediaSession.probing
+                                  ? null
+                                  : () async =>
+                                        widget.mediaSession.chooseSource(),
                               leading: const MfIcon(
                                 MfIconData.upload,
                                 size: 17,
                               ),
-                              child: const Text('Open media'),
+                              child: Text(strings.openMedia),
                             ),
                             const SizedBox(height: MfSpacing.md),
-                            const Text(
-                              'or choose File → Open',
+                            Text(
+                              strings.fileMenuHint,
                               style: TextStyle(
                                 color: MfPalette.faint,
                                 fontSize: 12,
@@ -441,11 +471,11 @@ class _InteractiveDropSurfaceState extends State<_InteractiveDropSurface> {
                         ),
                       ),
                     ),
-                    const Positioned(
+                    Positioned(
                       left: MfSpacing.lg,
                       bottom: MfSpacing.md,
                       child: Text(
-                        'Local processing · your media never leaves this Mac',
+                        strings.localProcessing,
                         style: TextStyle(color: MfPalette.faint, fontSize: 11),
                       ),
                     ),
@@ -467,9 +497,10 @@ class _DropOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return ColoredBox(
       key: const Key('drop-overlay'),
-      color: const Color(0xD90B0D10),
+      color: MfPalette.background.withValues(alpha: 0.88),
       child: Center(
         child: Container(
           width: 500,
@@ -485,7 +516,7 @@ class _DropOverlay extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const MfIcon(
+              MfIcon(
                 MfIconData.upload,
                 size: 42,
                 color: MfPalette.accentBright,
@@ -493,30 +524,30 @@ class _DropOverlay extends StatelessWidget {
               const SizedBox(height: MfSpacing.lg),
               Text(
                 mediaSession.hasMedia
-                    ? 'Drop to replace the current source'
-                    : 'Drop media anywhere in this window',
+                    ? strings.dropToReplace
+                    : strings.dropAnywhere,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: MfPalette.foreground,
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: MfSpacing.xs),
-              const Text(
-                'The current source remains unchanged until metadata validation succeeds.',
+              Text(
+                strings.sourceProbeContract,
                 textAlign: TextAlign.center,
                 style: TextStyle(color: MfPalette.muted, fontSize: 12),
               ),
               if (mediaSession.failure case final failure?) ...[
                 const SizedBox(height: MfSpacing.sm),
                 Text(
-                  '${failure.code.name}: ${failure.diagnostic}',
+                  strings.mediaProbeError(failure.code),
                   key: const Key('source-probe-error'),
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: MfPalette.muted, fontSize: 11),
+                  style: TextStyle(color: MfPalette.muted, fontSize: 11),
                 ),
               ],
               const SizedBox(height: MfSpacing.xl),
@@ -527,7 +558,7 @@ class _DropOverlay extends StatelessWidget {
                     key: const Key('cancel-drop'),
                     height: 36,
                     onPressed: mediaSession.hideDropOverlay,
-                    child: const Text('Cancel'),
+                    child: Text(strings.cancel),
                   ),
                   const SizedBox(width: MfSpacing.sm),
                   ShadButton(
@@ -535,13 +566,79 @@ class _DropOverlay extends StatelessWidget {
                     height: 36,
                     onPressed: mediaSession.probing
                         ? null
-                        : () => unawaited(mediaSession.probeCandidateSource()),
+                        : () async => mediaSession.chooseSource(),
                     leading: const MfIcon(MfIconData.upload, size: 16),
                     child: Text(
                       mediaSession.probing
-                          ? 'Inspecting media…'
-                          : 'Validate source',
+                          ? strings.inspectingMedia
+                          : strings.chooseMedia,
                     ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OverwriteDialog extends StatelessWidget {
+  const _OverwriteDialog({required this.conversion});
+
+  final ConversionController conversion;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
+    return ColoredBox(
+      key: const Key('overwrite-dialog'),
+      color: MfPalette.background.withValues(alpha: 0.72),
+      child: Center(
+        child: Container(
+          width: 440,
+          padding: const EdgeInsets.all(MfSpacing.xl),
+          decoration: BoxDecoration(
+            color: MfPalette.elevated,
+            borderRadius: BorderRadius.circular(MfRadius.xl),
+            border: Border.all(color: MfPalette.accentBright),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                strings.overwriteTitle,
+                style: TextStyle(
+                  color: MfPalette.foreground,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: MfSpacing.sm),
+              Text(
+                strings.overwriteMessage(conversion.outputPath ?? ''),
+                style: TextStyle(
+                  color: MfPalette.muted,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: MfSpacing.xl),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ShadButton.outline(
+                    key: const Key('cancel-overwrite'),
+                    onPressed: conversion.dismissOverwrite,
+                    child: Text(strings.cancel),
+                  ),
+                  const SizedBox(width: MfSpacing.sm),
+                  ShadButton(
+                    key: const Key('confirm-overwrite'),
+                    onPressed: () async => conversion.confirmOverwrite(),
+                    child: Text(strings.overwrite),
                   ),
                 ],
               ),
@@ -647,6 +744,7 @@ class _PreviewSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: MfPalette.surface,
@@ -669,7 +767,7 @@ class _PreviewSurface extends StatelessWidget {
                 child: Container(
                   width: 48,
                   height: 48,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Color(0xCC111419),
                     shape: BoxShape.circle,
                   ),
@@ -689,7 +787,7 @@ class _PreviewSurface extends StatelessWidget {
             Positioned(
               top: MfSpacing.sm,
               left: MfSpacing.sm,
-              child: _Pill(label: _previewPillLabel(preview)),
+              child: _Pill(label: _previewPillLabel(preview, strings)),
             ),
             Positioned(
               right: MfSpacing.sm,
@@ -712,11 +810,12 @@ class _PreviewControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return Container(
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: MfSpacing.xs),
       decoration: BoxDecoration(
-        color: const Color(0xE6111419),
+        color: MfPalette.surface.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(MfRadius.md),
         border: Border.all(color: MfPalette.border),
       ),
@@ -739,12 +838,12 @@ class _PreviewControls extends StatelessWidget {
           Text(
             formatMediaTime(preview.positionMs),
             key: const Key('preview-position'),
-            style: const TextStyle(color: MfPalette.foreground, fontSize: 12),
+            style: TextStyle(color: MfPalette.foreground, fontSize: 12),
           ),
           const SizedBox(width: MfSpacing.xs),
           Text(
             '/  ${formatMediaTime(preview.durationMs > 0 ? preview.durationMs : timeline.durationMs)}',
-            style: const TextStyle(color: MfPalette.faint, fontSize: 12),
+            style: TextStyle(color: MfPalette.faint, fontSize: 12),
           ),
           const Spacer(),
           ShadButton.ghost(
@@ -758,7 +857,7 @@ class _PreviewControls extends StatelessWidget {
                         ? 0
                         : preview.volumePercent + 11,
                   ),
-            child: Text('Volume  ${preview.volumePercent}%'),
+            child: Text(strings.volume(preview.volumePercent)),
           ),
         ],
       ),
@@ -777,23 +876,24 @@ class _PreviewBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return switch (preview.availability) {
       PreviewAvailability.placeholder => const _PrototypePortraitPreview(),
-      PreviewAvailability.opening => const _PreviewMessage(
-        key: Key('preview-opening'),
-        title: 'Opening preview…',
-        detail: 'Preparing native H.264 / HEVC playback',
+      PreviewAvailability.opening => _PreviewMessage(
+        key: const Key('preview-opening'),
+        title: strings.openingPreview,
+        detail: strings.preparingPreview,
       ),
       PreviewAvailability.ready =>
         nativePreviewSurface ??
-            const _PreviewMessage(
-              title: 'Preview output unavailable',
-              detail: 'Conversion remains available for this source.',
+            _PreviewMessage(
+              title: strings.previewUnavailable,
+              detail: strings.conversionStillAvailable,
             ),
-      PreviewAvailability.unavailable => const _PreviewMessage(
-        key: Key('preview-fallback'),
-        title: 'Preview unavailable',
-        detail: 'Conversion remains available for this source.',
+      PreviewAvailability.unavailable => _PreviewMessage(
+        key: const Key('preview-fallback'),
+        title: strings.previewUnavailable,
+        detail: strings.conversionStillAvailable,
       ),
     };
   }
@@ -811,7 +911,7 @@ class _PrototypePortraitPreview extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: MfSpacing.md),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(MfRadius.md),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
@@ -848,7 +948,7 @@ class _PreviewMessage extends StatelessWidget {
           children: [
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 color: MfPalette.foreground,
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -857,7 +957,7 @@ class _PreviewMessage extends StatelessWidget {
             const SizedBox(height: MfSpacing.xs),
             Text(
               detail,
-              style: const TextStyle(color: MfPalette.muted, fontSize: 11),
+              style: TextStyle(color: MfPalette.muted, fontSize: 11),
             ),
           ],
         ),
@@ -870,12 +970,12 @@ bool _previewCanInteract(PreviewController preview) =>
     preview.availability == PreviewAvailability.placeholder ||
     preview.availability == PreviewAvailability.ready;
 
-String _previewPillLabel(PreviewController preview) =>
+String _previewPillLabel(PreviewController preview, MfStrings strings) =>
     switch (preview.availability) {
       PreviewAvailability.placeholder => 'HEVC  ·  1242 × 2778',
-      PreviewAvailability.opening => 'Opening native preview',
-      PreviewAvailability.ready => 'Native preview  ·  Fit',
-      PreviewAvailability.unavailable => 'Preview unavailable',
+      PreviewAvailability.opening => strings.openingNativePreview,
+      PreviewAvailability.ready => strings.nativePreviewFit,
+      PreviewAvailability.unavailable => strings.previewUnavailable,
     };
 
 class _TimelinePanel extends StatelessWidget {
@@ -886,6 +986,7 @@ class _TimelinePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: MfPalette.surface,
@@ -903,8 +1004,8 @@ class _TimelinePanel extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text(
-                  'Trim range',
+                Text(
+                  strings.trimRange,
                   style: TextStyle(
                     color: MfPalette.foreground,
                     fontSize: 13,
@@ -913,8 +1014,10 @@ class _TimelinePanel extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '${formatMediaTime(timeline.selectedDurationMs)} selected',
-                  style: const TextStyle(color: MfPalette.muted, fontSize: 11),
+                  strings.selectedDuration(
+                    formatMediaTime(timeline.selectedDurationMs),
+                  ),
+                  style: TextStyle(color: MfPalette.muted, fontSize: 11),
                 ),
               ],
             ),
@@ -944,7 +1047,7 @@ class _TimelinePanel extends StatelessWidget {
               children: [
                 _TimeField(
                   inputKey: const Key('start-time-input'),
-                  label: 'START',
+                  label: strings.start,
                   valueMs: timeline.startMs,
                   onSubmitted: (String value) {
                     final committed = timeline.commitStartText(value);
@@ -957,7 +1060,7 @@ class _TimelinePanel extends StatelessWidget {
                 const SizedBox(width: MfSpacing.xs),
                 _TimeField(
                   inputKey: const Key('end-time-input'),
-                  label: 'END',
+                  label: strings.end,
                   valueMs: timeline.endMs,
                   onSubmitted: (String value) {
                     final committed = timeline.commitEndText(value);
@@ -970,19 +1073,19 @@ class _TimelinePanel extends StatelessWidget {
                 const Spacer(),
                 _CompactAction(
                   key: const Key('set-start'),
-                  label: 'Set Start',
+                  label: strings.setStart,
                   onPressed: timeline.setStartFromPlayhead,
                 ),
                 const SizedBox(width: MfSpacing.xxs),
                 _CompactAction(
                   key: const Key('set-end'),
-                  label: 'Set End',
+                  label: strings.setEnd,
                   onPressed: timeline.setEndFromPlayhead,
                 ),
                 const SizedBox(width: MfSpacing.xxs),
                 _CompactAction(
                   key: const Key('reset-trim'),
-                  label: 'Reset',
+                  label: strings.reset,
                   onPressed: () {
                     timeline.reset();
                     preview.seek(0);
@@ -991,7 +1094,7 @@ class _TimelinePanel extends StatelessWidget {
                 const SizedBox(width: MfSpacing.xxs),
                 _CompactAction(
                   key: const Key('play-selection'),
-                  label: 'Play Selection',
+                  label: strings.playSelection,
                   emphasized: true,
                   onPressed: () =>
                       preview.playSelection(timeline.startMs, timeline.endMs),
@@ -1082,8 +1185,9 @@ class _TimeFieldState extends State<_TimeField> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return Semantics(
-      label: 'Trim ${widget.label.toLowerCase()} time',
+      label: strings.trimTime(widget.label),
       textField: true,
       child: ShadInput(
         key: widget.inputKey,
@@ -1095,7 +1199,7 @@ class _TimeFieldState extends State<_TimeField> {
         gap: MfSpacing.xxs,
         leading: Text(
           widget.label,
-          style: const TextStyle(
+          style: TextStyle(
             color: MfPalette.faint,
             fontSize: 9,
             fontWeight: FontWeight.w600,
@@ -1233,7 +1337,7 @@ class _ConversionPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: MfPalette.surface,
         border: Border(left: BorderSide(color: MfPalette.border)),
       ),
@@ -1271,60 +1375,60 @@ class _ReadyContent extends StatelessWidget {
     final values = _ModePresentation.fromMode(
       conversion.mode,
       conversion.audioQuality,
+      MfStrings.of(context),
     );
+    final strings = MfStrings.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PaneTitle(
-          title: 'Export',
-          caption: 'Choose a format and destination',
-        ),
+        _PaneTitle(title: strings.export, caption: strings.exportCaption),
         const SizedBox(height: MfSpacing.lg),
-        const _SectionLabel('SOURCE'),
+        _SectionLabel(strings.source),
         const SizedBox(height: MfSpacing.xs),
         _SourceSummary(
           media: mediaSession.media!,
           replaceEnabled: true,
-          onReplace: mediaSession.showDropOverlay,
+          onReplace: mediaSession.chooseSource,
+          onClear: mediaSession.clearSource,
         ),
         const SizedBox(height: MfSpacing.lg),
-        const _SectionLabel('OUTPUT MODE'),
+        _SectionLabel(strings.outputMode),
         const SizedBox(height: MfSpacing.xs),
         _SegmentedModes(conversion: conversion),
         const SizedBox(height: MfSpacing.md),
-        _OptionRow(label: 'Container', value: values.container),
-        _OptionRow(label: 'Video', value: values.video),
-        _OptionRow(label: 'Audio', value: values.audio),
+        _OptionRow(label: strings.container, value: values.container),
+        _OptionRow(label: strings.video, value: values.video),
+        _OptionRow(label: strings.audio, value: values.audio),
         if (conversion.mode == MediaOutputMode.audioOnly) ...[
           const SizedBox(height: MfSpacing.md),
-          const _SectionLabel('MP3 QUALITY'),
+          _SectionLabel(strings.mp3Quality),
           const SizedBox(height: MfSpacing.xs),
           _AudioQualitySelector(conversion: conversion),
         ],
-        const SizedBox(height: MfSpacing.md),
-        const _SectionLabel('DESTINATION'),
+        const SizedBox(height: MfSpacing.sm),
+        _SectionLabel(strings.destination),
         const SizedBox(height: MfSpacing.xs),
-        _DestinationField(outputPath: conversion.outputPath),
+        _DestinationEditor(conversion: conversion),
         if (conversion.failure case final failure?) ...[
           const SizedBox(height: MfSpacing.xs),
           Text(
-            failure.code.name,
+            strings.conversionError(failure.code),
             key: const Key('conversion-error'),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: MfPalette.accentBright, fontSize: 10),
+            style: TextStyle(color: MfPalette.accentBright, fontSize: 10),
           ),
         ] else if (conversion.completedOutputPath != null) ...[
           const SizedBox(height: MfSpacing.xs),
-          const Text(
-            'Conversion completed',
+          Text(
+            strings.conversionCompleted,
             key: Key('conversion-completed'),
             style: TextStyle(color: MfPalette.accentBright, fontSize: 10),
           ),
         ] else if (conversion.jobState == ConversionJobState.cancelled) ...[
           const SizedBox(height: MfSpacing.xs),
-          const Text(
-            'Conversion cancelled',
+          Text(
+            strings.conversionCancelled,
             key: Key('conversion-cancelled'),
             style: TextStyle(color: MfPalette.muted, fontSize: 10),
           ),
@@ -1332,14 +1436,14 @@ class _ReadyContent extends StatelessWidget {
         const Spacer(),
         Row(
           children: [
-            const Text(
-              'Estimated size',
+            Text(
+              strings.estimatedSize,
               style: TextStyle(color: MfPalette.faint, fontSize: 11),
             ),
             const Spacer(),
             Text(
               values.estimatedSize,
-              style: const TextStyle(color: MfPalette.muted, fontSize: 11),
+              style: TextStyle(color: MfPalette.muted, fontSize: 11),
             ),
           ],
         ),
@@ -1348,6 +1452,7 @@ class _ReadyContent extends StatelessWidget {
           key: const Key('start-conversion'),
           width: double.infinity,
           height: 40,
+          padding: EdgeInsets.zero,
           onPressed: conversion.canStart
               ? () async {
                   await conversion.start(
@@ -1356,7 +1461,10 @@ class _ReadyContent extends StatelessWidget {
                   );
                 }
               : null,
-          child: Text(values.actionLabel),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(_localizedAction(strings, conversion.mode)),
+          ),
         ),
       ],
     );
@@ -1379,6 +1487,7 @@ class _ConvertingContent extends StatelessWidget {
     final presentation = _ConversionPresentation.fromMode(
       conversion.mode,
       conversion.audioQuality,
+      MfStrings.of(context),
     );
     final percent = (conversion.progress * 100).round();
     final hasBackendSample = conversion.totalMs > 0;
@@ -1393,23 +1502,25 @@ class _ConvertingContent extends StatelessWidget {
         '${framesPerSecond.toStringAsFixed(1)} fps',
       if (conversion.speed case final speed?) '${speed.toStringAsFixed(1)}×',
     ].join('  ·  ');
+    final strings = MfStrings.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _PaneTitle(title: 'Converting', caption: presentation.caption),
+        _PaneTitle(title: strings.converting, caption: presentation.caption),
         const SizedBox(height: MfSpacing.xl),
         _SourceSummary(
           media: mediaSession.media!,
           replaceEnabled: false,
-          onReplace: mediaSession.showDropOverlay,
+          onReplace: mediaSession.chooseSource,
+          onClear: mediaSession.clearSource,
         ),
         const SizedBox(height: MfSpacing.xl),
         Row(
           children: [
             Text(
-              conversion.cancelling ? 'Cancelling' : presentation.stage,
+              conversion.cancelling ? strings.cancelling : presentation.stage,
               key: const Key('conversion-stage'),
-              style: const TextStyle(
+              style: TextStyle(
                 color: MfPalette.foreground,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -1419,7 +1530,7 @@ class _ConvertingContent extends StatelessWidget {
             Text(
               '$percent%',
               key: const Key('progress-percent'),
-              style: const TextStyle(
+              style: TextStyle(
                 color: MfPalette.accentBright,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -1439,7 +1550,7 @@ class _ConvertingContent extends StatelessWidget {
                 key: const Key('progress-time'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: MfPalette.muted, fontSize: 10),
+                style: TextStyle(color: MfPalette.muted, fontSize: 10),
               ),
             ),
             const SizedBox(width: MfSpacing.sm),
@@ -1450,20 +1561,20 @@ class _ConvertingContent extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.end,
-                style: const TextStyle(color: MfPalette.muted, fontSize: 10),
+                style: TextStyle(color: MfPalette.muted, fontSize: 10),
               ),
             ),
           ],
         ),
         const SizedBox(height: MfSpacing.xxl),
-        const _ConversionStep(active: false, label: 'Preparing media'),
+        _ConversionStep(active: false, label: strings.preparingMedia),
         const SizedBox(height: MfSpacing.md),
         _ConversionStep(active: true, label: presentation.encodingStep),
         const SizedBox(height: MfSpacing.md),
         _ConversionStep(active: false, label: presentation.finalizingStep),
         const Spacer(),
-        const Text(
-          'Writing to a protected temporary file. Your existing destination remains unchanged until conversion succeeds.',
+        Text(
+          strings.protectedOutput,
           style: TextStyle(color: MfPalette.faint, fontSize: 11, height: 1.45),
         ),
         const SizedBox(height: MfSpacing.md),
@@ -1477,7 +1588,9 @@ class _ConvertingContent extends StatelessWidget {
                 }
               : null,
           child: Text(
-            conversion.cancelling ? 'Cancelling…' : 'Cancel conversion',
+            conversion.cancelling
+                ? strings.cancellingEllipsis
+                : strings.cancelConversion,
           ),
         ),
       ],
@@ -1498,7 +1611,7 @@ class _PaneTitle extends StatelessWidget {
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             color: MfPalette.foreground,
             fontSize: 19,
             fontWeight: FontWeight.w700,
@@ -1506,10 +1619,7 @@ class _PaneTitle extends StatelessWidget {
           ),
         ),
         const SizedBox(height: MfSpacing.xxs),
-        Text(
-          caption,
-          style: const TextStyle(color: MfPalette.muted, fontSize: 12),
-        ),
+        Text(caption, style: TextStyle(color: MfPalette.muted, fontSize: 12)),
       ],
     );
   }
@@ -1524,7 +1634,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         color: MfPalette.faint,
         fontSize: 10,
         fontWeight: FontWeight.w700,
@@ -1539,14 +1649,17 @@ class _SourceSummary extends StatelessWidget {
     required this.media,
     required this.replaceEnabled,
     required this.onReplace,
+    required this.onClear,
   });
 
   final MediaMetadata media;
   final bool replaceEnabled;
-  final VoidCallback onReplace;
+  final Future<bool> Function() onReplace;
+  final bool Function() onClear;
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return Container(
       padding: const EdgeInsets.all(MfSpacing.sm),
       decoration: BoxDecoration(
@@ -1573,23 +1686,35 @@ class _SourceSummary extends StatelessWidget {
                 const SizedBox(height: MfSpacing.xxs),
                 Text(
                   _sourceDescription(media),
-                  style: const TextStyle(color: MfPalette.muted, fontSize: 10),
+                  style: TextStyle(color: MfPalette.muted, fontSize: 10),
                 ),
               ],
             ),
           ),
           const SizedBox(width: MfSpacing.xs),
           if (replaceEnabled)
-            ShadButton.ghost(
-              key: const Key('replace-source'),
-              height: 30,
-              padding: const EdgeInsets.symmetric(horizontal: MfSpacing.xs),
-              onPressed: onReplace,
-              child: const Text('Replace'),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ShadButton.ghost(
+                  key: const Key('clear-source'),
+                  height: 30,
+                  padding: const EdgeInsets.symmetric(horizontal: MfSpacing.xs),
+                  onPressed: onClear,
+                  child: Text(strings.clear),
+                ),
+                ShadButton.ghost(
+                  key: const Key('replace-source'),
+                  height: 30,
+                  padding: const EdgeInsets.symmetric(horizontal: MfSpacing.xs),
+                  onPressed: () async => onReplace(),
+                  child: Text(strings.replace),
+                ),
+              ],
             )
           else
-            const Text(
-              'Source locked',
+            Text(
+              strings.sourceLocked,
               style: TextStyle(color: MfPalette.faint, fontSize: 10),
             ),
         ],
@@ -1615,6 +1740,7 @@ class _SegmentedModes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return Container(
       height: 36,
       padding: const EdgeInsets.all(MfSpacing.xxs),
@@ -1629,7 +1755,11 @@ class _SegmentedModes extends StatelessWidget {
             Expanded(
               child: _ModeOption(
                 key: Key('mode-${mode.name}'),
-                label: _modeLabel(mode),
+                label: switch (mode) {
+                  MediaOutputMode.videoWithAudio => strings.videoWithAudio,
+                  MediaOutputMode.videoOnly => strings.videoOnly,
+                  MediaOutputMode.audioOnly => strings.audioOnly,
+                },
                 selected: mode == conversion.mode,
                 onPressed: () => conversion.selectMode(mode),
               ),
@@ -1638,12 +1768,6 @@ class _SegmentedModes extends StatelessWidget {
       ),
     );
   }
-
-  static String _modeLabel(MediaOutputMode mode) => switch (mode) {
-    MediaOutputMode.videoWithAudio => 'Video + Audio',
-    MediaOutputMode.videoOnly => 'Video Only',
-    MediaOutputMode.audioOnly => 'Audio',
-  };
 }
 
 class _AudioQualitySelector extends StatelessWidget {
@@ -1653,6 +1777,7 @@ class _AudioQualitySelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
     return Container(
       height: 36,
       padding: const EdgeInsets.all(MfSpacing.xxs),
@@ -1667,7 +1792,11 @@ class _AudioQualitySelector extends StatelessWidget {
             Expanded(
               child: _ModeOption(
                 key: Key('quality-${quality.name}'),
-                label: _audioQualityLabel(quality),
+                label: switch (quality) {
+                  ConversionAudioQuality.high => strings.high,
+                  ConversionAudioQuality.medium => strings.medium,
+                  ConversionAudioQuality.low => strings.low,
+                },
                 selected: quality == conversion.audioQuality,
                 onPressed: () => conversion.selectAudioQuality(quality),
               ),
@@ -1785,17 +1914,14 @@ class _OptionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 30,
+      height: 26,
       child: Row(
         children: [
-          Text(
-            label,
-            style: const TextStyle(color: MfPalette.muted, fontSize: 11),
-          ),
+          Text(label, style: TextStyle(color: MfPalette.muted, fontSize: 11)),
           const Spacer(),
           Text(
             value,
-            style: const TextStyle(color: MfPalette.foreground, fontSize: 11),
+            style: TextStyle(color: MfPalette.foreground, fontSize: 11),
           ),
         ],
       ),
@@ -1803,52 +1929,93 @@ class _OptionRow extends StatelessWidget {
   }
 }
 
-class _DestinationField extends StatelessWidget {
-  const _DestinationField({required this.outputPath});
+class _DestinationEditor extends StatefulWidget {
+  const _DestinationEditor({required this.conversion});
 
-  final String? outputPath;
+  final ConversionController conversion;
+
+  @override
+  State<_DestinationEditor> createState() => _DestinationEditorState();
+}
+
+class _DestinationEditorState extends State<_DestinationEditor> {
+  late final TextEditingController _fileNameController;
+  late final FocusNode _fileNameFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    _fileNameController = TextEditingController(
+      text: widget.conversion.outputFileName,
+    );
+    _fileNameFocus = FocusNode(debugLabel: 'Output filename');
+  }
+
+  @override
+  void didUpdateWidget(_DestinationEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final fileName = widget.conversion.outputFileName ?? '';
+    if (!_fileNameFocus.hasFocus && _fileNameController.text != fileName) {
+      _fileNameController.text = fileName;
+    }
+  }
+
+  @override
+  void dispose() {
+    _fileNameController.dispose();
+    _fileNameFocus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final path = outputPath;
-    final separator = path?.lastIndexOf('/') ?? -1;
-    final fileName = path == null
-        ? 'Preparing destination…'
-        : path.substring(separator + 1);
-    final parent = path == null
-        ? 'Waiting for backend proposal'
-        : separator <= 0
-        ? '.'
-        : path.substring(0, separator);
-    return Container(
-      height: 62,
-      padding: const EdgeInsets.symmetric(
-        horizontal: MfSpacing.sm,
-        vertical: MfSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: MfPalette.elevated,
-        borderRadius: BorderRadius.circular(MfRadius.md),
-        border: Border.all(color: MfPalette.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            fileName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: MfPalette.foreground, fontSize: 11),
+    final conversion = widget.conversion;
+    final strings = MfStrings.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                conversion.outputDirectory ?? '…',
+                key: const Key('output-directory'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: MfPalette.faint, fontSize: 10),
+              ),
+            ),
+            const SizedBox(width: MfSpacing.xs),
+            ShadButton.ghost(
+              key: const Key('choose-output-directory'),
+              height: 28,
+              padding: const EdgeInsets.symmetric(horizontal: MfSpacing.xs),
+              onPressed: () async => conversion.chooseOutputDirectory(),
+              child: Text(strings.chooseFolder),
+            ),
+          ],
+        ),
+        const SizedBox(height: MfSpacing.xxs),
+        Semantics(
+          textField: true,
+          label: strings.outputFilename,
+          child: ShadInput(
+            key: const Key('output-filename'),
+            controller: _fileNameController,
+            focusNode: _fileNameFocus,
+            placeholder: Text(strings.outputFilename),
+            onChanged: conversion.setOutputFileName,
           ),
+        ),
+        if (conversion.destinationError case final error?) ...[
           const SizedBox(height: MfSpacing.xxs),
           Text(
-            parent,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: MfPalette.faint, fontSize: 10),
+            strings.destinationValidation(error),
+            key: const Key('destination-error'),
+            style: TextStyle(color: MfPalette.accentBright, fontSize: 10),
           ),
         ],
-      ),
+      ],
     );
   }
 }
@@ -1937,7 +2104,7 @@ class _Pill extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: const TextStyle(color: MfPalette.muted, fontSize: 10),
+          style: TextStyle(color: MfPalette.muted, fontSize: 10),
         ),
       ),
     );
@@ -1972,34 +2139,31 @@ class _ModePresentation {
     required this.video,
     required this.audio,
     required this.estimatedSize,
-    required this.actionLabel,
   });
 
   factory _ModePresentation.fromMode(
     MediaOutputMode mode,
     ConversionAudioQuality quality,
+    MfStrings strings,
   ) {
     return switch (mode) {
-      MediaOutputMode.videoWithAudio => const _ModePresentation(
+      MediaOutputMode.videoWithAudio => _ModePresentation(
         container: 'MP4',
         video: 'H.264 · Hardware',
         audio: 'AAC · 160 kbps',
         estimatedSize: '8–10 MB',
-        actionLabel: 'Convert video',
       ),
-      MediaOutputMode.videoOnly => const _ModePresentation(
+      MediaOutputMode.videoOnly => _ModePresentation(
         container: 'MP4',
         video: 'H.264 · Hardware',
-        audio: 'None',
+        audio: strings.none,
         estimatedSize: '7–9 MB',
-        actionLabel: 'Convert video',
       ),
       MediaOutputMode.audioOnly => _ModePresentation(
         container: 'MP3',
-        video: 'None',
+        video: strings.none,
         audio: 'MP3 · ${_audioQualityBitrate(quality)}',
         estimatedSize: '1–2 MB',
-        actionLabel: 'Convert audio',
       ),
     };
   }
@@ -2008,7 +2172,6 @@ class _ModePresentation {
   final String video;
   final String audio;
   final String estimatedSize;
-  final String actionLabel;
 }
 
 class _ConversionPresentation {
@@ -2022,25 +2185,26 @@ class _ConversionPresentation {
   factory _ConversionPresentation.fromMode(
     MediaOutputMode mode,
     ConversionAudioQuality quality,
+    MfStrings strings,
   ) {
     return switch (mode) {
-      MediaOutputMode.videoWithAudio => const _ConversionPresentation(
+      MediaOutputMode.videoWithAudio => _ConversionPresentation(
         caption: 'Hardware-accelerated H.264',
-        stage: 'Encoding video',
-        encodingStep: 'Encoding H.264 + AAC',
-        finalizingStep: 'Finalizing MP4',
+        stage: strings.encodingVideo,
+        encodingStep: strings.encodingH264Aac,
+        finalizingStep: strings.finalizingMp4,
       ),
-      MediaOutputMode.videoOnly => const _ConversionPresentation(
+      MediaOutputMode.videoOnly => _ConversionPresentation(
         caption: 'Hardware-accelerated H.264',
-        stage: 'Encoding video',
-        encodingStep: 'Encoding H.264',
-        finalizingStep: 'Finalizing MP4',
+        stage: strings.encodingVideo,
+        encodingStep: strings.encodingH264,
+        finalizingStep: strings.finalizingMp4,
       ),
       MediaOutputMode.audioOnly => _ConversionPresentation(
         caption: 'MP3 · ${_audioQualityBitrate(quality)}',
-        stage: 'Encoding audio',
-        encodingStep: 'Encoding MP3 · ${_audioQualityBitrate(quality)}',
-        finalizingStep: 'Finalizing MP3',
+        stage: strings.encodingAudio,
+        encodingStep: strings.encodingMp3(_audioQualityBitrate(quality)),
+        finalizingStep: strings.finalizingMp3,
       ),
     };
   }
@@ -2051,15 +2215,16 @@ class _ConversionPresentation {
   final String finalizingStep;
 }
 
-String _audioQualityLabel(ConversionAudioQuality quality) => switch (quality) {
-  ConversionAudioQuality.high => 'High',
-  ConversionAudioQuality.medium => 'Medium',
-  ConversionAudioQuality.low => 'Low',
-};
-
 String _audioQualityBitrate(ConversionAudioQuality quality) =>
     switch (quality) {
       ConversionAudioQuality.high => '256 kbps',
       ConversionAudioQuality.medium => '192 kbps',
       ConversionAudioQuality.low => '128 kbps',
+    };
+
+String _localizedAction(MfStrings strings, MediaOutputMode mode) =>
+    switch (mode) {
+      MediaOutputMode.videoWithAudio => strings.convertVideoAudio,
+      MediaOutputMode.videoOnly => strings.convertVideo,
+      MediaOutputMode.audioOnly => strings.convertAudio,
     };
