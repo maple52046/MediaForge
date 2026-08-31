@@ -9,6 +9,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly FFMPEG_SOURCE_DIR="${PROJECT_DIR}/third_parties/FFmpeg"
 readonly PREFIX="${PROJECT_DIR}/vendor/ffmpeg/macos-arm64"
+readonly FLUTTER_LIBRARY_DIR="${PROJECT_DIR}/app/rust_builder/macos/Libraries"
 readonly CACHE_DIR="${TMPDIR:-/tmp}/mediaforge-source-cache"
 readonly WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mediaforge-media-deps.XXXXXX")"
 
@@ -61,7 +62,31 @@ dependencies_are_current() {
   done
 }
 
+link_flutter_media_libraries() {
+  mkdir -p "${FLUTTER_LIBRARY_DIR}"
+  for library in \
+    libmediaforge_avcodec.dylib \
+    libmediaforge_avfilter.dylib \
+    libmediaforge_avformat.dylib \
+    libmediaforge_avutil.dylib \
+    libmediaforge_mp3lame.dylib \
+    libmediaforge_swresample.dylib \
+    libmediaforge_swscale.dylib; do
+    local destination="${FLUTTER_LIBRARY_DIR}/${library}"
+    if [[ -e "${destination}" && ! -L "${destination}" ]]; then
+      echo "Refusing to replace non-symlink Flutter media library: ${destination}" >&2
+      exit 1
+    fi
+    # Constraint: CocoaPods resolves vendored library globs before Cargokit's
+    # Rust phase, so clean checkouts need these links before `pod install`.
+    ln -sfn \
+      "../../../../vendor/ffmpeg/macos-arm64/frameworks/${library}" \
+      "${destination}"
+  done
+}
+
 if dependencies_are_current; then
+  link_flutter_media_libraries
   echo "Using media dependencies built from FFmpeg ${FFMPEG_RELEASE} in ${PREFIX}"
   exit 0
 fi
@@ -178,4 +203,5 @@ for library in "${PREFIX}"/lib/*.dylib; do
 done
 
 printf '%s\n' "${BUILD_FINGERPRINT}" >"${PREFIX}/.build-fingerprint"
+link_flutter_media_libraries
 echo "Built media dependencies from FFmpeg ${FFMPEG_RELEASE} in ${PREFIX}"

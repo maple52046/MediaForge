@@ -30,6 +30,7 @@ export PATH="${QT_BIN_DIR}:${PATH}"
 cd "${PROJECT_DIR}"
 "${SCRIPT_DIR}/generate-preview-fixtures.sh"
 "${SCRIPT_DIR}/verify-flutter.sh"
+"${SCRIPT_DIR}/bundle-flutter-macos.sh"
 cargo fmt --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
