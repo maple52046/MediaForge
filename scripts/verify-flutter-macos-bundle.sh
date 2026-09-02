@@ -3,7 +3,7 @@ set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-readonly BUNDLE_DIR="${PROJECT_DIR}/target/release/flutter-bundle"
+readonly BUNDLE_DIR="${PROJECT_DIR}/target/release/bundle"
 readonly APP_DIR="${BUNDLE_DIR}/macos/MediaForge.app"
 readonly EXECUTABLE="${APP_DIR}/Contents/MacOS/MediaForge"
 readonly FRAMEWORKS_DIR="${APP_DIR}/Contents/Frameworks"

@@ -79,6 +79,5 @@ flutter test
 flutter build macos --debug
 ```
 
-The repository `scripts/verify.sh` owns these checks alongside every active Qt
-and Rust gate during migration. Remove Qt requirements only when M12 formally
-removes that shell.
+The repository `scripts/verify.sh` owns these checks alongside Rust, FFmpeg
+integration, generated-bridge drift, and release-package verification gates.

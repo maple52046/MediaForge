@@ -25,9 +25,8 @@ intent was met.
 Before changing any artifact:
 
 1. Read `AGENTS.md` and this document completely.
-2. Read every standard applicable to the files or behavior in scope. Rust,
-   QML, and CXX-Qt changes also require `architecture.md` and
-   `comment-content-rule.md`.
+2. Read every standard applicable to the files or behavior in scope. Rust
+   changes also require `architecture.md` and `comment-content-rule.md`.
 3. Inspect the relevant implementation, tests, manifests, and repository status
    before choosing an approach. Treat existing violations as debt, not as
    precedent.
@@ -75,14 +74,11 @@ git diff --check
 ```
 
 `scripts/verify.sh` must include every active language and delivery gate. The
-Flutter shell requires non-mutating Dart formatting, strict analysis, tests,
-FRB drift validation when generated code exists, and a macOS build. The Qt
-shell requires `qmllint`, a non-mutating `qmlformat` comparison, QML tests, a Qt
-application build, and its macOS package verifier. Cargo format, Clippy for all
+Flutter application requires non-mutating Dart formatting, strict analysis,
+unit/widget and macOS integration tests, FRB drift validation, debug and release
+macOS builds, and the release bundle verifier. Cargo format, Clippy for all
 workspace targets and features with warnings denied, Rust tests, and FFmpeg
-integration tests remain shared gates. After an obsolete shell is removed,
-remove its gates rather than keeping an unused toolchain as a verification
-dependency.
+integration tests remain shared gates.
 
 For documentation-only or agent-instruction-only changes, verify formatting,
 all introduced local links, skill metadata when applicable, and
@@ -113,17 +109,6 @@ Inspect the final diff file by file and answer all applicable questions:
 - Are cancellation, resource lifetime, shared state, and lock-order assumptions
   explicit and testable?
 - Does every `unsafe` block have an immediately preceding `// SAFETY:` argument?
-
-### QML and CXX-Qt
-
-- Does presentation logic remain in QML while application and media policy stay
-  in inward Rust crates?
-- Are worker results queued to the Qt UI thread before QObject mutation or
-  signal emission?
-- Are custom controls keyboard accessible, named for assistive technology, and
-  based on integer-millisecond media state?
-- Does the bridge expose stable application values rather than framework types
-  owned by inner layers?
 
 ### Dart and Flutter
 

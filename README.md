@@ -2,8 +2,7 @@
 
 MediaForge is a focused macOS desktop application for probing, previewing,
 trimming, and converting one media file at a time. Rust calls FFmpeg libraries
-directly. Version 0.2.0 is migrating the desktop presentation from Qt to
-Flutter through explicit visual and functional parity gates.
+directly, while Flutter owns the desktop presentation and native preview.
 
 ## Development
 
@@ -13,7 +12,6 @@ Requirements:
 - Rust 1.88.0 with `rustfmt` and `clippy`
 - Flutter 3.47.0 with Dart 3.13.0
 - `flutter_rust_bridge_codegen` 2.12.0
-- Qt 6.11.1 Desktop for macOS installed by the Qt Online Installer
 - Clang, `make`, `pkg-config`, `curl`, `tar`, and Xcode command-line tools
 
 Initialize the pinned FFmpeg source after cloning:
@@ -22,30 +20,19 @@ Initialize the pinned FFmpeg source after cloning:
 git submodule update --init third_parties/FFmpeg
 ```
 
-Run the UI-first Flutter prototype:
+Build the repository media dependencies and run the desktop application:
 
 ```bash
+bash scripts/build-media-deps-macos.sh
 cd app
-flutter pub get
+flutter pub get --enforce-lockfile
 flutter run -d macos
 ```
 
-The Flutter shell uses fake data until both UI approval milestones pass. The
-Qt shell remains the functional application and a required verification gate
-during this transition.
-
-Point Cargo at Qt and run the desktop application:
+Run the complete source, integration, and release-package verification suite:
 
 ```bash
-export QMAKE="$HOME/Qt/6.11.1/macos/bin/qmake"
-bash scripts/build-media-deps-macos.sh
-cargo run -p mediaforge-qt
-```
-
-Run the complete dual-shell source verification suite:
-
-```bash
-QMAKE="$HOME/Qt/6.11.1/macos/bin/qmake" bash scripts/verify.sh
+bash scripts/verify.sh
 ```
 
 The ignored FFmpeg integration test creates synthetic fixtures with a
@@ -76,9 +63,13 @@ the application bundle.
 Create unsigned Apple Silicon app and DMG artifacts and verify their linkage:
 
 ```bash
-QMAKE="$HOME/Qt/6.11.1/macos/bin/qmake" bash scripts/bundle-macos.sh
-bash scripts/verify-macos-bundle.sh
+bash scripts/bundle-flutter-macos.sh
+bash scripts/verify-flutter-macos-bundle.sh
 ```
+
+The artifacts are written to
+`target/release/bundle/macos/MediaForge.app` and
+`target/release/bundle/dmg/MediaForge_0.2.0_aarch64.dmg`.
 
 See [Third-party notices](THIRD_PARTY_NOTICES.md) and
 [macOS distribution](docs/distribution/macos.md) for licensing, clean-machine

@@ -58,28 +58,9 @@ intentionally use different install identities. Preview names use framework
 identities, while conversion names begin with `libmediaforge_`; do not replace
 one family with binaries built for the other ABI.
 
-## Qt 6.11.1
-
-MediaForge dynamically links the Qt Core, GUI, Quick, QML, Network, and
-Multimedia shared frameworks under the Qt Community LGPLv3 terms. The bundle
-is intentionally unsigned and does not use static Qt linking.
-
-- Project and source: <https://code.qt.io/cgit/qt/>
-- Release source: <https://download.qt.io/archive/qt/6.11/6.11.1/submodules/>
-- Deployment recipe: `scripts/bundle-macos.sh` using `macdeployqt`
-- Relinking: replace compatible frameworks and plugins in the app bundle;
-  MediaForge contains no technical measure that prohibits replacement
-
-## CXX-Qt 0.9.1
-
-CXX-Qt provides the generated Rust/C++ Qt bridge and is licensed under MIT or
-Apache-2.0. MediaForge uses the MIT option for its bundled notice.
-
-- Project and source: <https://github.com/KDAB/cxx-qt/tree/v0.9.1>
-
 ## Lineicons free icons 1.0.6
 
-The small SVG subset in `assets/icons` was exported from
+The small SVG subset in `app/assets/icons` was exported from
 `@lineiconshq/free-icons` and is bundled under the MIT License.
 
 - Project: <https://lineicons.com/>

@@ -4,7 +4,6 @@ members = [
   "crates/mediaforge-core",
   "crates/mediaforge-ffmpeg",
   "crates/mediaforge-flutter-bridge",
-  "crates/mediaforge-qt",
 ]
 resolver = "2"
 

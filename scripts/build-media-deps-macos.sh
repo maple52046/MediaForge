@@ -186,8 +186,8 @@ for library in "${PREFIX}"/lib/*.dylib; do
       exit 1
       ;;
   esac
-  # Constraint: Qt Multimedia ships its own FFmpeg ABI, so MediaForge libraries
-  # need namespaced identities to coexist in one process without dyld collisions.
+  # Constraint: media_kit preview ships a separate FFmpeg ABI, so conversion
+  # libraries need namespaced identities to coexist without dyld collisions.
   install_name_tool -id "@rpath/${bundle_name}" "${library}"
   while IFS= read -r dependency; do
     if [[ "${dependency}" == "${PREFIX}"/lib/* ]]; then
