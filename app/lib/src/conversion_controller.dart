@@ -18,7 +18,7 @@ enum DestinationValidationError {
   /// The filename attempts to include a directory component.
   pathSeparator,
 
-  /// The filename extension does not match the selected output recipe.
+  /// A supplied filename extension does not match the selected output recipe.
   wrongExtension,
 
   /// The destination resolves to the selected source path.
@@ -154,7 +154,7 @@ class ConversionController extends ChangeNotifier {
   /// Selected destination directory shown independently from the filename.
   String? get outputDirectory => _outputDirectory;
 
-  /// Editable destination filename, including its mode-specific extension.
+  /// Editable destination filename, optionally omitting its mode extension.
   String? get outputFileName => _outputFileName;
 
   /// Stable validation reason that prevents an invalid destination from starting.
@@ -757,13 +757,13 @@ class ConversionController extends ChangeNotifier {
       _outputPath = null;
       return;
     }
-    final extension = _mode == MediaOutputMode.audioOnly ? '.mp3' : '.mp4';
-    if (!fileName.toLowerCase().endsWith(extension)) {
+    final normalizedFileName = _normalizeOutputFileName(fileName);
+    if (normalizedFileName == null) {
       _destinationError = DestinationValidationError.wrongExtension;
       _outputPath = null;
       return;
     }
-    final outputPath = _joinPath(directory, fileName);
+    final outputPath = _joinPath(directory, normalizedFileName);
     if (outputPath == _media?.path) {
       _destinationError = DestinationValidationError.sourceCollision;
       _outputPath = null;
@@ -771,6 +771,15 @@ class ConversionController extends ChangeNotifier {
     }
     _destinationError = null;
     _outputPath = outputPath;
+  }
+
+  String? _normalizeOutputFileName(String fileName) {
+    final extension = _mode == MediaOutputMode.audioOnly ? '.mp3' : '.mp4';
+    final dot = fileName.lastIndexOf('.');
+    if (dot <= 0) {
+      return '$fileName$extension';
+    }
+    return fileName.toLowerCase().endsWith(extension) ? fileName : null;
   }
 
   static ({String directory, String fileName}) _splitPath(String path) {

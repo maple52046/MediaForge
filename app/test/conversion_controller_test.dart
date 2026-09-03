@@ -260,6 +260,9 @@ void main() {
       controller.destinationError,
       DestinationValidationError.wrongExtension,
     );
+    controller.setOutputFileName('custom');
+    expect(controller.destinationError, isNull);
+    expect(controller.outputPath, '/exports/custom.mp4');
     controller.setOutputFileName('custom.mp4');
     expect(controller.outputPath, '/exports/custom.mp4');
 
@@ -268,6 +271,9 @@ void main() {
     expect(controller.outputDirectory, '/exports');
     expect(controller.outputFileName, 'source.mp3');
     expect(controller.outputPath, '/exports/source.mp3');
+    controller.setOutputFileName('audio');
+    expect(controller.destinationError, isNull);
+    expect(controller.outputPath, '/exports/audio.mp3');
   });
 
   test(

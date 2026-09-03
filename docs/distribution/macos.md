@@ -31,6 +31,12 @@ Run `otool -L` against the app executable and every library in
 `Contents/Frameworks`; media dependencies must resolve through `@rpath` and
 system libraries must resolve through `/System/Library` or `/usr/lib`.
 
+The direct-download build intentionally does not enable App Sandbox. Selecting
+one source file grants a sandboxed process access to that file but not permission
+to create MediaForge's atomic temporary output beside it. Native dialogs still
+scope user interaction, while the unsandboxed process preserves the documented
+default of writing the completed conversion next to the source.
+
 ## Signing and notarization follow-up
 
 When Apple Developer credentials become available, enable hardened runtime,

@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
@@ -18,6 +19,9 @@ Future<void> main() async {
   await BridgeRuntime().ensureInitialized();
   MediaKit.ensureInitialized();
   await windowManager.ensureInitialized();
+  // Constraint: beside-source atomic outputs require directory access beyond a
+  // sandbox grant for the single selected input file.
+  await FilePicker.skipEntitlementsChecks();
 
   const compact = bool.fromEnvironment('MEDIAFORGE_COMPACT_WINDOW');
   const large = bool.fromEnvironment('MEDIAFORGE_LARGE_WINDOW');

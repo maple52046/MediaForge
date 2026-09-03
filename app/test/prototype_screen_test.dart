@@ -278,6 +278,15 @@ void main() {
             .onPressed,
         isNull,
       );
+      await tester.enterText(filename, 'custom');
+      await tester.pump();
+      expect(find.byKey(const Key('destination-error')), findsNothing);
+      expect(
+        tester
+            .widget<ShadButton>(find.byKey(const Key('start-conversion')))
+            .onPressed,
+        isNotNull,
+      );
       await tester.enterText(filename, 'custom.mp4');
       await tester.pump();
       expect(find.byKey(const Key('destination-error')), findsNothing);

@@ -84,7 +84,7 @@ cp -R "${PREFIX}/share/licenses/lame" "${LICENSES_DIR}/"
 rm -rf "${FLUTTER_ASSETS_DIR}/test/fixtures"
 
 # Constraint: adding legal resources and refreshing conversion dylibs changes
-# Xcode's sealed bundle, so the unsigned release needs a fresh ad-hoc seal.
+# Xcode's sealed bundle, so the unsandboxed release needs a fresh ad-hoc seal.
 codesign --force --deep --sign - --timestamp=none "${APP_DIR}"
 
 mkdir -p "$(dirname "${DMG_PATH}")"

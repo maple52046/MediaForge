@@ -149,6 +149,11 @@ if ! grep -q '^Signature=adhoc$' <<<"${SIGNATURE_INFO}" || \
   echo "Flutter bundle must use only an ad-hoc signature." >&2
   exit 1
 fi
+readonly ENTITLEMENTS="$(codesign -d --entitlements - "${APP_DIR}" 2>&1)"
+if grep -q 'com.apple.security.app-sandbox' <<<"${ENTITLEMENTS}"; then
+  echo "Flutter bundle must remain unsandboxed for beside-source outputs." >&2
+  exit 1
+fi
 codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
 
 if [[ ! -f "${DMG_PATH}" ]]; then
