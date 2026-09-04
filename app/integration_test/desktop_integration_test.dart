@@ -13,6 +13,7 @@ import 'package:mediaforge/src/file_selection.dart';
 import 'package:mediaforge/src/media_kit_preview.dart';
 import 'package:mediaforge/src/media_probe_service.dart';
 import 'package:mediaforge/src/mediaforge_app.dart';
+import 'package:mediaforge/src/mf_icon.dart';
 import 'package:mediaforge/src/mf_timeline.dart';
 import 'package:mediaforge/src/mf_tokens.dart';
 import 'package:mediaforge/src/preview_controller.dart';
@@ -23,6 +24,9 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   final bridgeRuntime = BridgeRuntime();
+  final representativeMediaPath = Platform.environment['MEDIAFORGE_REAL_MEDIA'];
+  final representativeMediaUnavailable =
+      representativeMediaPath == null || representativeMediaPath.isEmpty;
 
   setUpAll(bridgeRuntime.ensureInitialized);
 
@@ -604,6 +608,153 @@ void main() {
       );
     });
   }
+
+  testWidgets('macOS media_kit previews representative local media', (
+    WidgetTester tester,
+  ) async {
+    final media = File(representativeMediaPath!);
+    expect(media.existsSync(), isTrue);
+    final session = MediaKitPreviewSession(source: media.path);
+    addTearDown(session.preview.close);
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox(
+          width: 640,
+          height: 480,
+          child: MediaKitVideoSurface(controller: session.video),
+        ),
+      ),
+    );
+    await session.preview.initialized;
+    await _waitForNativeState(
+      tester,
+      () =>
+          session.preview.availability == PreviewAvailability.ready &&
+          session.preview.durationMs > 0,
+    );
+
+    session.preview.togglePlayback();
+    await _waitForNativeState(
+      tester,
+      () => session.preview.playing && session.preview.positionMs > 0,
+    );
+    session.preview.togglePlayback();
+    await _waitForNativeState(tester, () => !session.preview.playing);
+  }, skip: representativeMediaUnavailable);
+
+  testWidgets('macOS selected local media plays through the workspace', (
+    WidgetTester tester,
+  ) async {
+    final media = File(representativeMediaPath!);
+    expect(media.existsSync(), isTrue);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 780);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(
+      MediaForgePrototypeApp(
+        state: PrototypeState.empty,
+        fileSelection: PrototypeFileSelection(sourcePath: media.path),
+        mediaProbeService: const RustMediaProbeService(),
+        conversionService: const RustConversionService(),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('open-media')));
+    await _waitForNativeState(
+      tester,
+      () =>
+          find.byKey(const Key('native-preview-video')).evaluate().isNotEmpty &&
+          find.byKey(const Key('preview-opening')).evaluate().isEmpty,
+    );
+    expect(find.byKey(const Key('preview-fallback')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('preview-center-play')));
+    await _waitForNativeState(
+      tester,
+      () =>
+          tester
+              .widget<MfIcon>(
+                find.descendant(
+                  of: find.byKey(const Key('preview-play')),
+                  matching: find.byType(MfIcon),
+                ),
+              )
+              .icon ==
+          MfIconData.pause,
+    );
+    await tester.tap(find.byKey(const Key('preview-play')));
+    await _waitForPreviewIcon(tester, MfIconData.play);
+  }, skip: representativeMediaUnavailable);
+
+  testWidgets('macOS local preview survives a conversion job', (
+    WidgetTester tester,
+  ) async {
+    final temporaryDirectory = await Directory.systemTemp.createTemp(
+      'mediaforge-preview-regression-',
+    );
+    final input = File('${temporaryDirectory.path}/source.mov');
+    await File(representativeMediaPath!).copy(input.path);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 780);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    try {
+      await tester.pumpWidget(
+        MediaForgePrototypeApp(
+          state: PrototypeState.empty,
+          fileSelection: PrototypeFileSelection(sourcePath: input.path),
+          mediaProbeService: const RustMediaProbeService(),
+          conversionService: const RustConversionService(),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('open-media')));
+      await _waitForNativeState(
+        tester,
+        () =>
+            find
+                .byKey(const Key('native-preview-video'))
+                .evaluate()
+                .isNotEmpty &&
+            find.byKey(const Key('preview-opening')).evaluate().isEmpty,
+      );
+
+      await tester.tap(find.byKey(const Key('preview-play')));
+      await _waitForPreviewIcon(tester, MfIconData.pause);
+      await tester.tap(find.byKey(const Key('preview-play')));
+      await _waitForPreviewIcon(tester, MfIconData.play);
+      final endInput = find.descendant(
+        of: find.byKey(const Key('end-time-input')),
+        matching: find.byType(EditableText),
+      );
+      await tester.enterText(endInput, '00:00:01.200');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('start-conversion')));
+      await _waitForNativeState(
+        tester,
+        () =>
+            find
+                .byKey(const Key('conversion-completed'))
+                .evaluate()
+                .isNotEmpty ||
+            find.byKey(const Key('conversion-error')).evaluate().isNotEmpty,
+        timeout: const Duration(seconds: 20),
+      );
+      _expectNoConversionError(tester);
+
+      await tester.tap(find.byKey(const Key('preview-play')));
+      await _waitForPreviewIcon(tester, MfIconData.pause);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (await temporaryDirectory.exists()) {
+        await temporaryDirectory.delete(recursive: true);
+      }
+    }
+  }, skip: representativeMediaUnavailable);
 }
 
 File _bundledProbeFixture() {
@@ -669,3 +820,18 @@ Future<void> _waitForNativeState(
     await tester.pump();
   }
 }
+
+Future<void> _waitForPreviewIcon(WidgetTester tester, MfIconData expected) =>
+    _waitForNativeState(
+      tester,
+      () =>
+          tester
+              .widget<MfIcon>(
+                find.descendant(
+                  of: find.byKey(const Key('preview-play')),
+                  matching: find.byType(MfIcon),
+                ),
+              )
+              .icon ==
+          expected,
+    );

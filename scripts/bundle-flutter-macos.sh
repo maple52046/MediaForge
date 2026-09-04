@@ -7,6 +7,7 @@ readonly FLUTTER_PROJECT_DIR="${PROJECT_DIR}/app"
 readonly PREFIX="${PROJECT_DIR}/vendor/ffmpeg/macos-arm64"
 readonly SOURCE_APP="${FLUTTER_PROJECT_DIR}/build/macos/Build/Products/Release/MediaForge.app"
 readonly BUNDLE_DIR="${PROJECT_DIR}/target/release/bundle"
+readonly OBSOLETE_BUNDLE_DIR="${PROJECT_DIR}/target/release/flutter-bundle"
 readonly APP_DIR="${BUNDLE_DIR}/macos/MediaForge.app"
 readonly FRAMEWORKS_DIR="${APP_DIR}/Contents/Frameworks"
 readonly RESOURCES_DIR="${APP_DIR}/Contents/Resources"
@@ -95,5 +96,9 @@ hdiutil create \
   -ov \
   -format UDZO \
   "${DMG_PATH}"
+
+# Operational Context: M11 used this path, which can otherwise leave a stale
+# application beside the canonical M12 release and misdirect manual testing.
+rm -rf "${OBSOLETE_BUNDLE_DIR}"
 
 "${SCRIPT_DIR}/verify-flutter-macos-bundle.sh"

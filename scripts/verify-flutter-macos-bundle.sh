@@ -4,6 +4,7 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly BUNDLE_DIR="${PROJECT_DIR}/target/release/bundle"
+readonly OBSOLETE_APP_DIR="${PROJECT_DIR}/target/release/flutter-bundle/macos/MediaForge.app"
 readonly APP_DIR="${BUNDLE_DIR}/macos/MediaForge.app"
 readonly EXECUTABLE="${APP_DIR}/Contents/MacOS/MediaForge"
 readonly FRAMEWORKS_DIR="${APP_DIR}/Contents/Frameworks"
@@ -24,6 +25,10 @@ done
 
 if [[ ! -x "${EXECUTABLE}" ]]; then
   echo "Missing Flutter bundle executable: ${EXECUTABLE}" >&2
+  exit 1
+fi
+if [[ -e "${OBSOLETE_APP_DIR}" ]]; then
+  echo "Obsolete Flutter bundle could be mistaken for the current release: ${OBSOLETE_APP_DIR}" >&2
   exit 1
 fi
 if [[ -e "${APP_DIR}/Contents/MacOS/MediaForge.debug.dylib" || \
