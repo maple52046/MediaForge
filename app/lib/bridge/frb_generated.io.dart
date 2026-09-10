@@ -138,6 +138,9 @@ abstract class MediaForgeRustLibApiImplPlatform
   MediaOutputMode dco_decode_media_output_mode(dynamic raw);
 
   @protected
+  MediaVideoQuality dco_decode_media_video_quality(dynamic raw);
+
+  @protected
   int? dco_decode_opt_CastedPrimitive_u_64(dynamic raw);
 
   @protected
@@ -316,6 +319,11 @@ abstract class MediaForgeRustLibApiImplPlatform
 
   @protected
   MediaOutputMode sse_decode_media_output_mode(SseDeserializer deserializer);
+
+  @protected
+  MediaVideoQuality sse_decode_media_video_quality(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int? sse_decode_opt_CastedPrimitive_u_64(SseDeserializer deserializer);
@@ -540,6 +548,12 @@ abstract class MediaForgeRustLibApiImplPlatform
   @protected
   void sse_encode_media_output_mode(
     MediaOutputMode self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_media_video_quality(
+    MediaVideoQuality self,
     SseSerializer serializer,
   );
 

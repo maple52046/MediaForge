@@ -113,6 +113,9 @@ class MfStrings {
   /// MP3 quality section label.
   String get mp3Quality => _zh ? 'MP3 品質' : 'MP3 QUALITY';
 
+  /// H.264 quality section label.
+  String get videoQuality => _zh ? '影片品質' : 'VIDEO QUALITY';
+
   /// Container metadata label.
   String get container => _zh ? '容器' : 'Container';
 
@@ -186,6 +189,18 @@ class MfStrings {
 
   /// Low MP3 quality label.
   String get low => _zh ? '低' : 'Low';
+
+  /// Smaller video output quality label.
+  String get smaller => _zh ? '較小' : 'Smaller';
+
+  /// Balanced video output quality label.
+  String get balanced => _zh ? '平衡' : 'Balanced';
+
+  /// High video output quality label.
+  String get highQuality => _zh ? '高品質' : 'High';
+
+  /// Content-adaptive video size description.
+  String get dependsOnContent => _zh ? '依內容而定' : 'Depends on content';
 
   /// Primary conversion action.
   String get convertVideoAudio => _zh ? '轉換視訊＋音訊' : 'Convert video + audio';

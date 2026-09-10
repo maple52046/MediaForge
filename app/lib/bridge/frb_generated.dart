@@ -703,6 +703,12 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   }
 
   @protected
+  MediaVideoQuality dco_decode_media_video_quality(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return MediaVideoQuality.values[raw as int];
+  }
+
+  @protected
   int? dco_decode_opt_CastedPrimitive_u_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_CastedPrimitive_u_64(raw);
@@ -762,16 +768,17 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   StartTranscodeRequestDto dco_decode_start_transcode_request_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return StartTranscodeRequestDto(
       inputPath: dco_decode_String(arr[0]),
       outputPath: dco_decode_String(arr[1]),
       mode: dco_decode_media_output_mode(arr[2]),
-      audioQuality: dco_decode_media_audio_quality(arr[3]),
-      startMs: dco_decode_CastedPrimitive_u_64(arr[4]),
-      endMs: dco_decode_CastedPrimitive_u_64(arr[5]),
-      overwrite: dco_decode_bool(arr[6]),
+      videoQuality: dco_decode_media_video_quality(arr[3]),
+      audioQuality: dco_decode_media_audio_quality(arr[4]),
+      startMs: dco_decode_CastedPrimitive_u_64(arr[5]),
+      endMs: dco_decode_CastedPrimitive_u_64(arr[6]),
+      overwrite: dco_decode_bool(arr[7]),
     );
   }
 
@@ -1173,6 +1180,15 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   }
 
   @protected
+  MediaVideoQuality sse_decode_media_video_quality(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_i_32(deserializer);
+    return MediaVideoQuality.values[inner];
+  }
+
+  @protected
   int? sse_decode_opt_CastedPrimitive_u_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1274,6 +1290,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
     final var_inputPath = sse_decode_String(deserializer);
     final var_outputPath = sse_decode_String(deserializer);
     final var_mode = sse_decode_media_output_mode(deserializer);
+    final var_videoQuality = sse_decode_media_video_quality(deserializer);
     final var_audioQuality = sse_decode_media_audio_quality(deserializer);
     final var_startMs = sse_decode_CastedPrimitive_u_64(deserializer);
     final var_endMs = sse_decode_CastedPrimitive_u_64(deserializer);
@@ -1282,6 +1299,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
       inputPath: var_inputPath,
       outputPath: var_outputPath,
       mode: var_mode,
+      videoQuality: var_videoQuality,
       audioQuality: var_audioQuality,
       startMs: var_startMs,
       endMs: var_endMs,
@@ -1669,6 +1687,15 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_media_video_quality(
+    MediaVideoQuality self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_opt_CastedPrimitive_u_64(
     int? self,
     SseSerializer serializer,
@@ -1769,6 +1796,7 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
     sse_encode_String(self.inputPath, serializer);
     sse_encode_String(self.outputPath, serializer);
     sse_encode_media_output_mode(self.mode, serializer);
+    sse_encode_media_video_quality(self.videoQuality, serializer);
     sse_encode_media_audio_quality(self.audioQuality, serializer);
     sse_encode_CastedPrimitive_u_64(self.startMs, serializer);
     sse_encode_CastedPrimitive_u_64(self.endMs, serializer);

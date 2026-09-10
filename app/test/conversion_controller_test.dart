@@ -39,6 +39,7 @@ void main() {
     expect(request.inputPath, '/tmp/source.mov');
     expect(request.outputPath, '/tmp/source.mp4');
     expect(request.mode, MediaOutputMode.videoWithAudio);
+    expect(request.videoQuality, ConversionVideoQuality.balanced);
     expect(request.startMs, 200);
     expect(request.endMs, 1200);
     expect(request.overwrite, isFalse);
@@ -225,6 +226,45 @@ void main() {
     );
     await _drainEvents();
   });
+
+  test(
+    'video quality is retained across modes and locks while active',
+    () async {
+      final conversionService = _FakeConversionService();
+      final controller = ConversionController(
+        service: conversionService,
+        outputPathService: _FakeProbeService('/tmp/source.mp4'),
+      );
+      addTearDown(() async {
+        await controller.close();
+        controller.dispose();
+        await conversionService.close();
+      });
+      controller.setMedia(_media());
+      expect(controller.videoQuality, ConversionVideoQuality.balanced);
+      controller.selectVideoQuality(ConversionVideoQuality.smaller);
+      controller.selectMode(MediaOutputMode.audioOnly);
+      controller.selectMode(MediaOutputMode.videoOnly);
+      await _drainEvents();
+
+      expect(controller.videoQuality, ConversionVideoQuality.smaller);
+      await controller.start(startMs: 0, endMs: 2000);
+      expect(
+        conversionService.requests.single.videoQuality,
+        ConversionVideoQuality.smaller,
+      );
+      controller.selectVideoQuality(ConversionVideoQuality.high);
+      expect(controller.videoQuality, ConversionVideoQuality.smaller);
+
+      conversionService.emit(
+        const ConversionJobEvent(
+          kind: ConversionJobEventKind.cancelled,
+          jobId: 7,
+        ),
+      );
+      await _drainEvents();
+    },
+  );
 
   test('destination directory and filename remain mode-safe', () async {
     final conversionService = _FakeConversionService();

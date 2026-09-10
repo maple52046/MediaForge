@@ -89,6 +89,7 @@ class ConversionController extends ChangeNotifier {
   MediaMetadata? _media;
   List<MediaOutputMode> _availableModes;
   MediaOutputMode _mode = MediaOutputMode.videoWithAudio;
+  ConversionVideoQuality _videoQuality = ConversionVideoQuality.balanced;
   ConversionAudioQuality _audioQuality = ConversionAudioQuality.medium;
   bool _converting;
   double _progress;
@@ -117,6 +118,9 @@ class ConversionController extends ChangeNotifier {
 
   /// Selected output recipe.
   MediaOutputMode get mode => _mode;
+
+  /// Selected H.264 quality retained while audio-only output is active.
+  ConversionVideoQuality get videoQuality => _videoQuality;
 
   /// Selected MP3 quality retained while other output modes are active.
   ConversionAudioQuality get audioQuality => _audioQuality;
@@ -263,6 +267,17 @@ class ConversionController extends ChangeNotifier {
     _notifyListeners();
   }
 
+  /// Selects H.264 quality while no conversion is active.
+  void selectVideoQuality(ConversionVideoQuality quality) {
+    if (_converting || _videoQuality == quality) {
+      return;
+    }
+    _videoQuality = quality;
+    _completedOutputPath = null;
+    _failure = null;
+    _notifyListeners();
+  }
+
   /// Removes source and destination state after the media session is cleared.
   void clearMedia() {
     if (_converting || _closed) {
@@ -376,6 +391,7 @@ class ConversionController extends ChangeNotifier {
         inputPath: media.path,
         outputPath: outputPath,
         mode: _mode,
+        videoQuality: _videoQuality,
         audioQuality: _audioQuality,
         startMs: startMs,
         endMs: endMs,
@@ -396,6 +412,7 @@ class ConversionController extends ChangeNotifier {
         inputPath: request.inputPath,
         outputPath: request.outputPath,
         mode: request.mode,
+        videoQuality: request.videoQuality,
         audioQuality: request.audioQuality,
         startMs: request.startMs,
         endMs: request.endMs,

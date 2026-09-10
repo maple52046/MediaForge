@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use mediaforge_core::{
     AudioQuality, Cancellation, MediaBackend, MediaError, OutputMode, ProgressObserver,
-    ProgressUpdate, TranscodeRequest, TrimRange,
+    ProgressUpdate, TranscodeRequest, TrimRange, VideoQuality,
 };
 use mediaforge_ffmpeg::FfmpegBackend;
 
@@ -88,6 +88,7 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
                     output_path: output.clone(),
                     mode,
                     trim,
+                    video_quality: VideoQuality::Balanced,
                     audio_quality: quality,
                     overwrite: false,
                 },
@@ -114,6 +115,7 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
             output_path: cancelled_output.clone(),
             mode: OutputMode::VideoOnly,
             trim,
+            video_quality: VideoQuality::Balanced,
             audio_quality: AudioQuality::Medium,
             overwrite: false,
         },
@@ -128,6 +130,51 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
         .filter(|entry| entry.file_name().to_string_lossy().contains(".part."))
         .count();
     assert_eq!(partial_count, 0);
+}
+
+#[test]
+#[ignore = "requires the developer-only FFmpeg CLI and macOS VideoToolbox"]
+fn video_quality_outputs_have_monotonic_sizes() {
+    let workspace = tempfile::tempdir().expect("test workspace must be created");
+    let source = workspace.path().join("quality-source.avi");
+    generate_quality_fixture(&source);
+    let backend = FfmpegBackend::new().expect("FFmpeg must initialize");
+    let source_info = backend
+        .probe(&source)
+        .expect("quality fixture must be probed");
+    let trim = TrimRange::new(0, source_info.duration_ms, source_info.duration_ms)
+        .expect("quality fixture must have a duration");
+    let sizes = [
+        VideoQuality::Smaller,
+        VideoQuality::Balanced,
+        VideoQuality::High,
+    ]
+    .map(|video_quality| {
+        let output = workspace
+            .path()
+            .join(format!("quality-{video_quality:?}.mp4"));
+        backend
+            .transcode(
+                &TranscodeRequest {
+                    input_path: source.clone(),
+                    output_path: output.clone(),
+                    mode: OutputMode::VideoOnly,
+                    trim,
+                    video_quality,
+                    audio_quality: AudioQuality::Medium,
+                    overwrite: false,
+                },
+                &RecordedProgress::default(),
+                Arc::new(NeverCancelled),
+            )
+            .unwrap_or_else(|error| panic!("{video_quality:?} transcode failed: {error}"));
+        std::fs::metadata(output)
+            .expect("quality output must be readable")
+            .len()
+    });
+
+    assert!(sizes[0] < sizes[1], "sizes were not monotonic: {sizes:?}");
+    assert!(sizes[1] < sizes[2], "sizes were not monotonic: {sizes:?}");
 }
 
 #[test]
@@ -178,6 +225,7 @@ fn validates_representative_user_media_without_mutating_the_source() {
                     output_path: output.clone(),
                     mode,
                     trim,
+                    video_quality: VideoQuality::Balanced,
                     audio_quality: quality,
                     overwrite: false,
                 },
@@ -198,6 +246,7 @@ fn validates_representative_user_media_without_mutating_the_source() {
             output_path: cancelled_output.clone(),
             mode: OutputMode::VideoWithAudio,
             trim,
+            video_quality: VideoQuality::Balanced,
             audio_quality: AudioQuality::Medium,
             overwrite: false,
         },
@@ -219,6 +268,78 @@ fn validates_representative_user_media_without_mutating_the_source() {
             .filter(|entry| entry.file_name().to_string_lossy().contains(".part."))
             .count(),
         0
+    );
+}
+
+#[test]
+#[ignore = "requires MEDIAFORGE_QUALITY_REFERENCE and macOS VideoToolbox"]
+fn validates_balanced_quality_reference_size_and_bitrate() {
+    let Some(source) =
+        std::env::var_os("MEDIAFORGE_QUALITY_REFERENCE").map(std::path::PathBuf::from)
+    else {
+        eprintln!("MEDIAFORGE_QUALITY_REFERENCE is unset; quality calibration gate skipped");
+        return;
+    };
+    let original_size = std::fs::metadata(&source)
+        .expect("quality reference must be readable")
+        .len();
+    let backend = FfmpegBackend::new().expect("FFmpeg must initialize");
+    let source_info = backend
+        .probe(&source)
+        .expect("quality reference must be probed");
+    let trim = TrimRange::new(0, source_info.duration_ms, source_info.duration_ms)
+        .expect("quality reference must have a duration");
+    let workspace = tempfile::tempdir().expect("test workspace must be created");
+    let output = workspace.path().join("balanced-reference.mp4");
+
+    backend
+        .transcode(
+            &TranscodeRequest {
+                input_path: source.clone(),
+                output_path: output.clone(),
+                mode: OutputMode::VideoWithAudio,
+                trim,
+                video_quality: VideoQuality::Balanced,
+                audio_quality: AudioQuality::Medium,
+                overwrite: false,
+            },
+            &RecordedProgress::default(),
+            Arc::new(NeverCancelled),
+        )
+        .expect("balanced quality reference transcode must succeed");
+
+    let output_size = std::fs::metadata(&output)
+        .expect("quality reference output must be readable")
+        .len();
+    let output_info = backend
+        .probe(&output)
+        .expect("quality reference output must be probed");
+    let video_bitrate = output_info
+        .video
+        .as_ref()
+        .and_then(|video| video.bitrate)
+        .expect("quality reference output must report video bitrate");
+    assert!(
+        (35_000_000..=45_000_000).contains(&output_size),
+        "balanced output size {output_size} was outside 35-45 MB; metadata: {output_info:?}"
+    );
+    assert!(
+        (1_800_000..=2_200_000).contains(&video_bitrate),
+        "balanced video bitrate {video_bitrate} was outside 1.8-2.2 Mbps"
+    );
+    assert!(output_info.video.is_some());
+    assert!(output_info.audio.is_some());
+    assert!(
+        output_info.duration_ms.abs_diff(source_info.duration_ms) <= 1_000,
+        "balanced output duration {} differed from source duration {}",
+        output_info.duration_ms,
+        source_info.duration_ms
+    );
+    assert_eq!(
+        std::fs::metadata(source)
+            .expect("quality reference must remain readable")
+            .len(),
+        original_size
     );
 }
 
@@ -251,4 +372,28 @@ fn generate_fixture(path: &Path) {
         .status()
         .expect("developer FFmpeg CLI must be installed");
     assert!(status.success(), "synthetic fixture generation failed");
+}
+
+fn generate_quality_fixture(path: &Path) {
+    let status = Command::new("ffmpeg")
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=640x360:rate=30",
+            "-t",
+            "3",
+            "-c:v",
+            "rawvideo",
+            "-pix_fmt",
+            "yuv420p",
+            "-y",
+        ])
+        .arg(path)
+        .status()
+        .expect("developer FFmpeg CLI must be installed");
+    assert!(status.success(), "quality fixture generation failed");
 }

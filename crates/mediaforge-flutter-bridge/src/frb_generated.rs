@@ -715,6 +715,19 @@ impl SseDecode for crate::api::media::MediaOutputMode {
     }
 }
 
+impl SseDecode for crate::api::media::MediaVideoQuality {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::media::MediaVideoQuality::Smaller,
+            1 => crate::api::media::MediaVideoQuality::Balanced,
+            2 => crate::api::media::MediaVideoQuality::High,
+            _ => unreachable!("Invalid variant for MediaVideoQuality: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for Option<u64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -815,6 +828,7 @@ impl SseDecode for crate::api::media::StartTranscodeRequestDto {
         let mut var_inputPath = <String>::sse_decode(deserializer);
         let mut var_outputPath = <String>::sse_decode(deserializer);
         let mut var_mode = <crate::api::media::MediaOutputMode>::sse_decode(deserializer);
+        let mut var_videoQuality = <crate::api::media::MediaVideoQuality>::sse_decode(deserializer);
         let mut var_audioQuality = <crate::api::media::MediaAudioQuality>::sse_decode(deserializer);
         let mut var_startMs = <u64>::sse_decode(deserializer);
         let mut var_endMs = <u64>::sse_decode(deserializer);
@@ -823,6 +837,7 @@ impl SseDecode for crate::api::media::StartTranscodeRequestDto {
             input_path: var_inputPath,
             output_path: var_outputPath,
             mode: var_mode,
+            video_quality: var_videoQuality,
             audio_quality: var_audioQuality,
             start_ms: var_startMs,
             end_ms: var_endMs,
@@ -1324,12 +1339,35 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::media::MediaOutputMode>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::media::MediaVideoQuality {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Smaller => 0.into_dart(),
+            Self::Balanced => 1.into_dart(),
+            Self::High => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::media::MediaVideoQuality
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::media::MediaVideoQuality>
+    for crate::api::media::MediaVideoQuality
+{
+    fn into_into_dart(self) -> crate::api::media::MediaVideoQuality {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::media::StartTranscodeRequestDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.input_path.into_into_dart().into_dart(),
             self.output_path.into_into_dart().into_dart(),
             self.mode.into_into_dart().into_dart(),
+            self.video_quality.into_into_dart().into_dart(),
             self.audio_quality.into_into_dart().into_dart(),
             self.start_ms.into_into_dart().into_dart(),
             self.end_ms.into_into_dart().into_dart(),
@@ -1687,6 +1725,23 @@ impl SseEncode for crate::api::media::MediaOutputMode {
     }
 }
 
+impl SseEncode for crate::api::media::MediaVideoQuality {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::media::MediaVideoQuality::Smaller => 0,
+                crate::api::media::MediaVideoQuality::Balanced => 1,
+                crate::api::media::MediaVideoQuality::High => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for Option<u64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1773,6 +1828,7 @@ impl SseEncode for crate::api::media::StartTranscodeRequestDto {
         <String>::sse_encode(self.input_path, serializer);
         <String>::sse_encode(self.output_path, serializer);
         <crate::api::media::MediaOutputMode>::sse_encode(self.mode, serializer);
+        <crate::api::media::MediaVideoQuality>::sse_encode(self.video_quality, serializer);
         <crate::api::media::MediaAudioQuality>::sse_encode(self.audio_quality, serializer);
         <u64>::sse_encode(self.start_ms, serializer);
         <u64>::sse_encode(self.end_ms, serializer);

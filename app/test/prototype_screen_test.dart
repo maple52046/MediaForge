@@ -74,6 +74,7 @@ void main() {
     await tester.tap(find.byKey(const Key('language-traditionalChinese')));
     await tester.pumpAndSettle();
     expect(find.text('介面設定'), findsOneWidget);
+    expect(find.text('影片品質'), findsOneWidget);
     expect(MfPalette.background, MfLightPalette.background);
     expect(tester.takeException(), isNull);
 
@@ -128,6 +129,25 @@ void main() {
     expect(find.text('Finalizing MP3'), findsOneWidget);
     await tester.tap(find.byKey(const Key('cancel-conversion')));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('video quality is accessible and fits the minimum viewport', (
+    WidgetTester tester,
+  ) async {
+    await _setSurfaceSize(tester, supportedSizes.first);
+    await tester.pumpWidget(
+      const MediaForgePrototypeApp(state: PrototypeState.loaded),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('video-quality-balanced')), findsOneWidget);
+    expect(find.bySemanticsLabel('Balanced'), findsOneWidget);
+    expect(find.text('Depends on content'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('video-quality-smaller')));
+    await tester.pumpAndSettle();
+    expect(find.text('H.264 · Smaller'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    _expectNoWorkspaceScrollable(tester);
   });
 
   testWidgets('fake conversion starts, reports progress, and cancels', (

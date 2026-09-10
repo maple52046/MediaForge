@@ -162,6 +162,7 @@ void main() {
     tester.view.physicalSize = const Size(1200, 780);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
+    _registerNativeSurfaceTeardown(tester);
     final fixture = _bundledProbeFixture();
 
     await tester.pumpWidget(
@@ -514,6 +515,7 @@ void main() {
       source: 'asset:///test/fixtures/preview-hevc.mp4',
     );
     addTearDown(session.preview.close);
+    _registerNativeSurfaceTeardown(tester);
 
     await tester.pumpWidget(
       MediaForgePrototypeApp(
@@ -557,6 +559,7 @@ void main() {
     ) async {
       final session = MediaKitPreviewSession(source: fixture.source);
       addTearDown(session.preview.close);
+      _registerNativeSurfaceTeardown(tester);
       await tester.pumpWidget(
         Directionality(
           textDirection: TextDirection.ltr,
@@ -616,6 +619,7 @@ void main() {
     expect(media.existsSync(), isTrue);
     final session = MediaKitPreviewSession(source: media.path);
     addTearDown(session.preview.close);
+    _registerNativeSurfaceTeardown(tester);
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
@@ -652,6 +656,7 @@ void main() {
     tester.view.physicalSize = const Size(1200, 780);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
+    _registerNativeSurfaceTeardown(tester);
     await tester.pumpWidget(
       MediaForgePrototypeApp(
         state: PrototypeState.empty,
@@ -787,6 +792,13 @@ Future<void> _mountLoadedPrototype(WidgetTester tester) async {
 Future<void> _pumpPrototypeMotion(WidgetTester tester) async {
   // Contract: M2 motion tokens complete within 180 ms.
   await tester.pump(const Duration(milliseconds: 250));
+}
+
+void _registerNativeSurfaceTeardown(WidgetTester tester) {
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  });
 }
 
 void _expectNoWorkspaceScrollable(WidgetTester tester) {

@@ -9,7 +9,7 @@ use mediaforge_application::{
 };
 use mediaforge_core::{
     propose_output_path, AudioQuality, AudioStreamInfo, BackendCapabilities, MediaBackend,
-    MediaError, MediaInfo, OutputMode, TranscodeRequest, TrimRange, VideoStreamInfo,
+    MediaError, MediaInfo, OutputMode, TranscodeRequest, TrimRange, VideoQuality, VideoStreamInfo,
 };
 use mediaforge_ffmpeg::FfmpegBackend;
 
@@ -82,6 +82,17 @@ pub enum MediaAudioQuality {
     Low,
 }
 
+/// H.264 quality values in the stable conversion request contract.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MediaVideoQuality {
+    /// Prioritizes a smaller output file.
+    Smaller,
+    /// Balances compression and visual detail.
+    Balanced,
+    /// Prioritizes visual detail.
+    High,
+}
+
 /// Plain conversion request accepted from Flutter presentation state.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StartTranscodeRequestDto {
@@ -91,6 +102,8 @@ pub struct StartTranscodeRequestDto {
     pub output_path: String,
     /// Requested output recipe.
     pub mode: MediaOutputMode,
+    /// H.264 quality used when the selected recipe contains video.
+    pub video_quality: MediaVideoQuality,
     /// MP3 quality used when the selected recipe is audio-only.
     pub audio_quality: MediaAudioQuality,
     /// Inclusive trim start in integer milliseconds.
@@ -457,6 +470,7 @@ fn build_transcode_request(
         input_path: request_input_path,
         output_path: request_output_path,
         mode,
+        video_quality,
         audio_quality,
         start_ms,
         end_ms,
@@ -472,6 +486,7 @@ fn build_transcode_request(
         output_path,
         mode,
         trim,
+        video_quality: video_quality.into(),
         audio_quality: audio_quality.into(),
         overwrite,
     })
@@ -600,6 +615,16 @@ impl From<MediaAudioQuality> for AudioQuality {
             MediaAudioQuality::High => Self::High,
             MediaAudioQuality::Medium => Self::Medium,
             MediaAudioQuality::Low => Self::Low,
+        }
+    }
+}
+
+impl From<MediaVideoQuality> for VideoQuality {
+    fn from(quality: MediaVideoQuality) -> Self {
+        match quality {
+            MediaVideoQuality::Smaller => Self::Smaller,
+            MediaVideoQuality::Balanced => Self::Balanced,
+            MediaVideoQuality::High => Self::High,
         }
     }
 }
@@ -797,36 +822,8 @@ mod tests {
 
     #[test]
     fn request_reconstructs_all_domain_modes_and_quality_values() {
-        let media = MediaInfo {
-            path: PathBuf::from("/tmp/input.mov"),
-            file_name: "input.mov".to_owned(),
-            file_size_bytes: 1,
-            duration_ms: 2_000,
-            format: "mov".to_owned(),
-            video: Some(VideoStreamInfo {
-                codec: "h264".to_owned(),
-                width: 320,
-                height: 180,
-                frame_rate: Some(24.0),
-                bitrate: None,
-                pixel_format: None,
-            }),
-            audio: Some(AudioStreamInfo {
-                codec: "aac".to_owned(),
-                sample_rate: Some(48_000),
-                channels: Some(1),
-                bitrate: None,
-            }),
-        };
-        let request = StartTranscodeRequestDto {
-            input_path: "/tmp/input.mov".to_owned(),
-            output_path: "/tmp/output.mp4".to_owned(),
-            mode: MediaOutputMode::VideoWithAudio,
-            audio_quality: MediaAudioQuality::Medium,
-            start_ms: 200,
-            end_ms: 1_200,
-            overwrite: false,
-        };
+        let media = test_media_info();
+        let request = test_transcode_request();
 
         let domain = build_transcode_request(
             request.clone(),
@@ -838,6 +835,7 @@ mod tests {
         assert_eq!(domain.trim.start_ms(), 200);
         assert_eq!(domain.trim.end_ms(), 1_200);
         assert_eq!(domain.mode, OutputMode::VideoWithAudio);
+        assert_eq!(domain.video_quality, VideoQuality::Balanced);
         assert_eq!(domain.audio_quality, AudioQuality::Medium);
         assert!(!domain.overwrite);
 
@@ -857,6 +855,7 @@ mod tests {
         let video_only = build_transcode_request(
             StartTranscodeRequestDto {
                 mode: MediaOutputMode::VideoOnly,
+                video_quality: MediaVideoQuality::High,
                 audio_quality: MediaAudioQuality::High,
                 ..request.clone()
             },
@@ -866,11 +865,13 @@ mod tests {
         )
         .unwrap_or_else(|error| panic!("{error}"));
         assert_eq!(video_only.mode, OutputMode::VideoOnly);
+        assert_eq!(video_only.video_quality, VideoQuality::High);
         assert_eq!(video_only.audio_quality, AudioQuality::High);
 
         let audio_only = build_transcode_request(
             StartTranscodeRequestDto {
                 mode: MediaOutputMode::AudioOnly,
+                video_quality: MediaVideoQuality::Smaller,
                 audio_quality: MediaAudioQuality::Low,
                 ..request
             },
@@ -880,26 +881,63 @@ mod tests {
         )
         .unwrap_or_else(|error| panic!("{error}"));
         assert_eq!(audio_only.mode, OutputMode::AudioOnly);
+        assert_eq!(audio_only.video_quality, VideoQuality::Smaller);
         assert_eq!(audio_only.audio_quality, AudioQuality::Low);
+    }
 
+    #[test]
+    fn request_rejects_a_mode_without_its_required_stream() {
         let error = build_transcode_request(
             StartTranscodeRequestDto {
-                input_path: "/tmp/input.mov".to_owned(),
-                output_path: "/tmp/output.mp3".to_owned(),
                 mode: MediaOutputMode::AudioOnly,
-                audio_quality: MediaAudioQuality::Medium,
-                start_ms: 0,
-                end_ms: 1_000,
-                overwrite: false,
+                output_path: "/tmp/output.mp3".to_owned(),
+                ..test_transcode_request()
             },
             PathBuf::from("/tmp/input.mov"),
             PathBuf::from("/tmp/output.mp3"),
             &MediaInfo {
                 audio: None,
-                ..media
+                ..test_media_info()
             },
         )
         .expect_err("audio-only must reject a source without audio");
         assert_eq!(error.code, MediaBridgeErrorCode::UnsupportedInput);
+    }
+
+    fn test_media_info() -> MediaInfo {
+        MediaInfo {
+            path: PathBuf::from("/tmp/input.mov"),
+            file_name: "input.mov".to_owned(),
+            file_size_bytes: 1,
+            duration_ms: 2_000,
+            format: "mov".to_owned(),
+            video: Some(VideoStreamInfo {
+                codec: "h264".to_owned(),
+                width: 320,
+                height: 180,
+                frame_rate: Some(24.0),
+                bitrate: None,
+                pixel_format: None,
+            }),
+            audio: Some(AudioStreamInfo {
+                codec: "aac".to_owned(),
+                sample_rate: Some(48_000),
+                channels: Some(1),
+                bitrate: None,
+            }),
+        }
+    }
+
+    fn test_transcode_request() -> StartTranscodeRequestDto {
+        StartTranscodeRequestDto {
+            input_path: "/tmp/input.mov".to_owned(),
+            output_path: "/tmp/output.mp4".to_owned(),
+            mode: MediaOutputMode::VideoWithAudio,
+            video_quality: MediaVideoQuality::Balanced,
+            audio_quality: MediaAudioQuality::Medium,
+            start_ms: 200,
+            end_ms: 1_200,
+            overwrite: false,
+        }
     }
 }

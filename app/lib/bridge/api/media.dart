@@ -11,7 +11,7 @@ import '../frb_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `active_job_id`, `build_transcode_request`, `canonicalize_output_path`, `canonicalize_path`, `is_terminal`, `job_event_id`, `media_runtime`, `path_to_string`, `subscribe`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `BridgeJobEventSink`, `EventDelivery`, `MediaRuntime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `emit`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `emit`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`, `default`
 
 /// Initializes the process-wide `FFmpeg` adapter and reports its capabilities.
@@ -449,12 +449,25 @@ enum MediaOutputMode {
   audioOnly,
 }
 
+/// H.264 quality values in the stable conversion request contract.
+enum MediaVideoQuality {
+  /// Prioritizes a smaller output file.
+  smaller,
+
+  /// Balances compression and visual detail.
+  balanced,
+
+  /// Prioritizes visual detail.
+  high,
+}
+
 /// Plain conversion request accepted from Flutter presentation state.
 class StartTranscodeRequestDto {
   const StartTranscodeRequestDto({
     required this.inputPath,
     required this.outputPath,
     required this.mode,
+    required this.videoQuality,
     required this.audioQuality,
     required this.startMs,
     required this.endMs,
@@ -469,6 +482,9 @@ class StartTranscodeRequestDto {
 
   /// Requested output recipe.
   final MediaOutputMode mode;
+
+  /// H.264 quality used when the selected recipe contains video.
+  final MediaVideoQuality videoQuality;
 
   /// MP3 quality used when the selected recipe is audio-only.
   final MediaAudioQuality audioQuality;
@@ -487,6 +503,7 @@ class StartTranscodeRequestDto {
       inputPath.hashCode ^
       outputPath.hashCode ^
       mode.hashCode ^
+      videoQuality.hashCode ^
       audioQuality.hashCode ^
       startMs.hashCode ^
       endMs.hashCode ^
@@ -500,6 +517,7 @@ class StartTranscodeRequestDto {
           inputPath == other.inputPath &&
           outputPath == other.outputPath &&
           mode == other.mode &&
+          videoQuality == other.videoQuality &&
           audioQuality == other.audioQuality &&
           startMs == other.startMs &&
           endMs == other.endMs &&

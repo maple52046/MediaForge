@@ -468,7 +468,9 @@ mod tests {
     use std::path::Path;
     use std::sync::Condvar;
 
-    use mediaforge_core::{AudioQuality, BackendCapabilities, MediaInfo, OutputMode, TrimRange};
+    use mediaforge_core::{
+        AudioQuality, BackendCapabilities, MediaInfo, OutputMode, TrimRange, VideoQuality,
+    };
 
     use super::*;
 
@@ -597,6 +599,7 @@ mod tests {
             output_path: "output.mp4".into(),
             mode: OutputMode::VideoWithAudio,
             trim: TrimRange::new(0, 1_000, 1_000).unwrap_or_else(|error| panic!("{error}")),
+            video_quality: VideoQuality::Balanced,
             audio_quality: AudioQuality::Medium,
             overwrite: false,
         }

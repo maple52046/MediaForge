@@ -13,6 +13,18 @@ enum ConversionAudioQuality {
   low,
 }
 
+/// H.264 quality selected for outputs containing video.
+enum ConversionVideoQuality {
+  /// Prioritizes a smaller output file.
+  smaller,
+
+  /// Balances compression and visual detail.
+  balanced,
+
+  /// Prioritizes visual detail.
+  high,
+}
+
 /// Stable lifecycle values returned with a started conversion.
 enum ConversionJobState {
   /// No conversion has started.
@@ -98,6 +110,7 @@ class ConversionRequest {
     required this.inputPath,
     required this.outputPath,
     required this.mode,
+    required this.videoQuality,
     required this.audioQuality,
     required this.startMs,
     required this.endMs,
@@ -112,6 +125,9 @@ class ConversionRequest {
 
   /// Selected Rust-authoritative output recipe.
   final MediaOutputMode mode;
+
+  /// H.264 quality used when [mode] contains video.
+  final ConversionVideoQuality videoQuality;
 
   /// MP3 quality used when [mode] is [MediaOutputMode.audioOnly].
   final ConversionAudioQuality audioQuality;
@@ -242,6 +258,7 @@ class RustConversionService implements ConversionService {
           inputPath: request.inputPath,
           outputPath: request.outputPath,
           mode: _toBridgeMode(request.mode),
+          videoQuality: _toBridgeVideoQuality(request.videoQuality),
           audioQuality: _toBridgeQuality(request.audioQuality),
           startMs: request.startMs,
           endMs: request.endMs,
@@ -294,6 +311,14 @@ bridge.MediaAudioQuality _toBridgeQuality(ConversionAudioQuality quality) =>
       ConversionAudioQuality.medium => bridge.MediaAudioQuality.medium,
       ConversionAudioQuality.low => bridge.MediaAudioQuality.low,
     };
+
+bridge.MediaVideoQuality _toBridgeVideoQuality(
+  ConversionVideoQuality quality,
+) => switch (quality) {
+  ConversionVideoQuality.smaller => bridge.MediaVideoQuality.smaller,
+  ConversionVideoQuality.balanced => bridge.MediaVideoQuality.balanced,
+  ConversionVideoQuality.high => bridge.MediaVideoQuality.high,
+};
 
 ConversionJobState _fromBridgeState(bridge.JobStateDto state) =>
     switch (state) {

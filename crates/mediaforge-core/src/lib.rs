@@ -121,6 +121,18 @@ impl OutputMode {
     }
 }
 
+/// User-facing quality choices for H.264 video output.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum VideoQuality {
+    /// Prioritizes a smaller file over fine visual detail.
+    Smaller,
+    /// Balances compression and visual detail for general use.
+    #[default]
+    Balanced,
+    /// Retains more visual detail at the cost of a larger file.
+    High,
+}
+
 /// User-facing MP3 quality choices.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AudioQuality {
@@ -200,6 +212,8 @@ pub struct TranscodeRequest {
     pub mode: OutputMode,
     /// Selected source range.
     pub trim: TrimRange,
+    /// H.264 quality used for outputs containing video.
+    pub video_quality: VideoQuality,
     /// MP3 quality used for audio-only output.
     pub audio_quality: AudioQuality,
     /// Whether an existing destination may be replaced after successful encoding.
@@ -348,26 +362,6 @@ pub enum MediaError {
     Unexpected(String),
 }
 
-/// Calculates the balanced H.264 bitrate policy in bits per second.
-#[must_use]
-pub fn balanced_video_bitrate(
-    width: u32,
-    height: u32,
-    frames_per_second: Option<f64>,
-    source_bitrate: Option<u64>,
-) -> u64 {
-    let frames_per_second = frames_per_second.unwrap_or(30.0).max(1.0);
-    let calculated = (f64::from(width) * f64::from(height) * frames_per_second * 0.07)
-        .clamp(2_000_000.0, 20_000_000.0);
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "the finite policy result is positive and clamped to 20 million"
-    )]
-    let bounded = calculated as u64;
-    source_bitrate.map_or(bounded, |source| bounded.min(source))
-}
-
 /// Proposes an output beside the source with the requested mode's extension.
 #[must_use]
 pub fn propose_output_path(input: &Path, mode: OutputMode) -> PathBuf {
@@ -441,19 +435,8 @@ mod tests {
     }
 
     #[test]
-    fn bitrate_policy_is_bounded_and_never_exceeds_source() {
-        assert_eq!(
-            balanced_video_bitrate(320, 180, Some(24.0), None),
-            2_000_000
-        );
-        assert_eq!(
-            balanced_video_bitrate(7680, 4320, Some(120.0), None),
-            20_000_000
-        );
-        assert_eq!(
-            balanced_video_bitrate(1920, 1080, Some(30.0), Some(3_000_000)),
-            3_000_000
-        );
+    fn video_quality_defaults_to_balanced() {
+        assert_eq!(VideoQuality::default(), VideoQuality::Balanced);
     }
 
     #[test]

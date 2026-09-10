@@ -5,12 +5,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use ffmpeg::{
-    codec, encoder, filter, format, frame, media, software, Dictionary, Packet, Rational,
+    codec, color, encoder, filter, format, frame, media, software, Dictionary, Packet, Rational,
 };
 use ffmpeg_next as ffmpeg;
 use mediaforge_core::{
-    balanced_video_bitrate, Cancellation, MediaError, OutputMode, ProgressObserver, ProgressUpdate,
-    TranscodeRequest, TrimRange,
+    Cancellation, MediaError, OutputMode, ProgressObserver, ProgressUpdate, TranscodeRequest,
+    TrimRange, VideoQuality,
 };
 
 static TEMPORARY_OUTPUT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -74,7 +74,12 @@ fn transcode_to(
         let stream = input
             .stream(index)
             .ok_or_else(|| MediaError::DecodeFailed("video stream disappeared".to_owned()))?;
-        Some(VideoTranscoder::new(&stream, &mut output, request.trim)?)
+        Some(VideoTranscoder::new(
+            &stream,
+            &mut output,
+            request.trim,
+            request.video_quality,
+        )?)
     } else {
         None
     };
@@ -277,6 +282,7 @@ impl VideoTranscoder {
         input: &format::stream::Stream<'_>,
         output: &mut format::context::Output,
         trim: TrimRange,
+        quality: VideoQuality,
     ) -> Result<Self, MediaError> {
         let mut decoder = codec::context::Context::from_parameters(input.parameters())
             .and_then(|context| context.decoder().video())
@@ -302,33 +308,29 @@ impl VideoTranscoder {
         video_encoder.set_height(decoder.height());
         video_encoder.set_aspect_ratio(decoder.aspect_ratio());
         video_encoder.set_format(format::Pixel::YUV420P);
+        video_encoder.set_colorspace(decoder.color_space());
+        video_encoder.set_color_range(decoder.color_range());
+        video_encoder.set_color_primaries(decoder.color_primaries());
+        video_encoder.set_color_transfer_characteristic(decoder.color_transfer_characteristic());
         video_encoder.set_frame_rate(Some(frame_rate));
         video_encoder.set_time_base(encoder_time_base);
-        let source_bitrate = u64::try_from(decoder.bit_rate())
-            .ok()
-            .filter(|bitrate| *bitrate > 0);
-        let target_bitrate = usize::try_from(balanced_video_bitrate(
-            decoder.width(),
-            decoder.height(),
-            Some(f64::from(frame_rate)),
-            source_bitrate,
-        ))
-        .map_err(|error| MediaError::EncoderUnavailable(error.to_string()))?;
-        video_encoder.set_bit_rate(target_bitrate);
-        video_encoder.set_gop(frame_rate.numerator().unsigned_abs().saturating_mul(2));
+        // Constraint: VideoToolbox treats `rc_max_rate` as a competing rate-control mode.
+        video_encoder.set_global_quality(videotoolbox_global_quality(quality));
+        video_encoder.set_gop(two_second_gop(frame_rate));
+        let mut encoder_flags = codec::Flags::QSCALE;
         if global_header {
-            video_encoder.set_flags(codec::Flags::GLOBAL_HEADER);
+            encoder_flags |= codec::Flags::GLOBAL_HEADER;
         }
+        video_encoder.set_flags(encoder_flags);
         let mut options = Dictionary::new();
         // Constraint: permit Apple's VideoToolbox fallback without substituting a GPL encoder.
         options.set("allow_sw", "1");
-        options.set("realtime", "1");
         let video_encoder = video_encoder
             .open_as_with(codec, options)
             .map_err(|error| MediaError::EncoderUnavailable(error.to_string()))?;
         output_stream.set_time_base(encoder_time_base);
         output_stream.set_parameters(&video_encoder);
-        let scaler = software::scaling::Context::get(
+        let mut scaler = software::scaling::Context::get(
             decoder.format(),
             decoder.width(),
             decoder.height(),
@@ -338,6 +340,7 @@ impl VideoTranscoder {
             software::scaling::Flags::BILINEAR,
         )
         .map_err(|error| MediaError::DecodeFailed(error.to_string()))?;
+        configure_scaler_colorspace(&mut scaler, decoder.color_space(), decoder.color_range())?;
 
         Ok(Self {
             stream_index: input.index(),
@@ -394,6 +397,10 @@ impl VideoTranscoder {
             self.scaler
                 .run(&decoded, &mut scaled)
                 .map_err(|error| MediaError::DecodeFailed(error.to_string()))?;
+            scaled.set_color_space(decoded.color_space());
+            scaled.set_color_range(decoded.color_range());
+            scaled.set_color_primaries(decoded.color_primaries());
+            scaled.set_color_transfer_characteristic(decoded.color_transfer_characteristic());
             scaled.set_pts(Some(self.next_pts));
             scaled.set_kind(ffmpeg::picture::Type::None);
             self.next_pts += 1;
@@ -719,6 +726,65 @@ fn valid_frame_rate(candidate: Rational) -> Rational {
     }
 }
 
+fn videotoolbox_quality(quality: VideoQuality) -> i32 {
+    match quality {
+        VideoQuality::Smaller => 35,
+        VideoQuality::Balanced => 45,
+        VideoQuality::High => 55,
+    }
+}
+
+fn videotoolbox_global_quality(quality: VideoQuality) -> i32 {
+    videotoolbox_quality(quality).saturating_mul(ffmpeg::ffi::FF_QP2LAMBDA)
+}
+
+#[allow(
+    unsafe_code,
+    reason = "ffmpeg-next does not expose sws_setColorspaceDetails"
+)]
+fn configure_scaler_colorspace(
+    scaler: &mut software::scaling::Context,
+    space: color::Space,
+    range: color::Range,
+) -> Result<(), MediaError> {
+    let colorspace = match space {
+        color::Space::BT709 => ffmpeg::ffi::SWS_CS_ITU709,
+        color::Space::FCC => ffmpeg::ffi::SWS_CS_FCC,
+        color::Space::SMPTE240M => ffmpeg::ffi::SWS_CS_SMPTE240M,
+        color::Space::BT2020NCL | color::Space::BT2020CL => ffmpeg::ffi::SWS_CS_BT2020,
+        _ => ffmpeg::ffi::SWS_CS_DEFAULT,
+    };
+    let full_range = i32::from(range == color::Range::JPEG);
+    // SAFETY: the scaler owns an initialized SwsContext, and FFmpeg owns the static coefficients.
+    let status = unsafe {
+        let coefficients = ffmpeg::ffi::sws_getCoefficients(colorspace);
+        ffmpeg::ffi::sws_setColorspaceDetails(
+            scaler.as_mut_ptr(),
+            coefficients,
+            full_range,
+            coefficients,
+            full_range,
+            0,
+            1 << 16,
+            1 << 16,
+        )
+    };
+    if status < 0 {
+        Err(MediaError::DecodeFailed(format!(
+            "could not preserve video colorspace: FFmpeg error {status}"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+fn two_second_gop(frame_rate: Rational) -> u32 {
+    let numerator = u64::from(frame_rate.numerator().unsigned_abs());
+    let denominator = u64::from(frame_rate.denominator().unsigned_abs()).max(1);
+    let rounded = numerator.saturating_mul(2).saturating_add(denominator / 2) / denominator;
+    u32::try_from(rounded.max(1)).unwrap_or(u32::MAX)
+}
+
 fn timestamp_to_milliseconds(timestamp: i64, time_base: Rational) -> u64 {
     if timestamp <= 0 || time_base.numerator() <= 0 || time_base.denominator() <= 0 {
         return 0;
@@ -841,6 +907,23 @@ mod tests {
         let frame_rate = valid_frame_rate(Rational(0, 0));
         assert_eq!(frame_rate.numerator(), 30);
         assert_eq!(frame_rate.denominator(), 1);
+    }
+
+    #[test]
+    fn video_quality_maps_to_calibrated_videotoolbox_values() {
+        assert_eq!(videotoolbox_quality(VideoQuality::Smaller), 35);
+        assert_eq!(videotoolbox_quality(VideoQuality::Balanced), 45);
+        assert_eq!(videotoolbox_quality(VideoQuality::High), 55);
+        assert_eq!(
+            videotoolbox_global_quality(VideoQuality::Balanced),
+            45 * ffmpeg::ffi::FF_QP2LAMBDA
+        );
+    }
+
+    #[test]
+    fn two_second_gop_rounds_fractional_frame_rates() {
+        assert_eq!(two_second_gop(Rational(30, 1)), 60);
+        assert_eq!(two_second_gop(Rational(42_900, 787)), 109);
     }
 
     #[test]

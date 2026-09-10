@@ -1374,7 +1374,9 @@ class _ReadyContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final values = _ModePresentation.fromMode(
       conversion.mode,
+      conversion.videoQuality,
       conversion.audioQuality,
+      timeline.selectedDurationMs,
       MfStrings.of(context),
     );
     final strings = MfStrings.of(context);
@@ -1399,7 +1401,12 @@ class _ReadyContent extends StatelessWidget {
         _OptionRow(label: strings.container, value: values.container),
         _OptionRow(label: strings.video, value: values.video),
         _OptionRow(label: strings.audio, value: values.audio),
-        if (conversion.mode == MediaOutputMode.audioOnly) ...[
+        if (conversion.mode != MediaOutputMode.audioOnly) ...[
+          const SizedBox(height: MfSpacing.md),
+          _SectionLabel(strings.videoQuality),
+          const SizedBox(height: MfSpacing.xs),
+          _VideoQualitySelector(conversion: conversion),
+        ] else ...[
           const SizedBox(height: MfSpacing.md),
           _SectionLabel(strings.mp3Quality),
           const SizedBox(height: MfSpacing.xs),
@@ -1436,14 +1443,23 @@ class _ReadyContent extends StatelessWidget {
         const Spacer(),
         Row(
           children: [
-            Text(
-              strings.estimatedSize,
-              style: TextStyle(color: MfPalette.faint, fontSize: 11),
+            Expanded(
+              child: Text(
+                strings.estimatedSize,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: MfPalette.faint, fontSize: 11),
+              ),
             ),
-            const Spacer(),
-            Text(
-              values.estimatedSize,
-              style: TextStyle(color: MfPalette.muted, fontSize: 11),
+            const SizedBox(width: MfSpacing.sm),
+            Expanded(
+              child: Text(
+                values.estimatedSize,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(color: MfPalette.muted, fontSize: 11),
+              ),
             ),
           ],
         ),
@@ -1761,6 +1777,7 @@ class _SegmentedModes extends StatelessWidget {
                   MediaOutputMode.audioOnly => strings.audioOnly,
                 },
                 selected: mode == conversion.mode,
+                enabled: !conversion.converting,
                 onPressed: () => conversion.selectMode(mode),
               ),
             ),
@@ -1798,7 +1815,46 @@ class _AudioQualitySelector extends StatelessWidget {
                   ConversionAudioQuality.low => strings.low,
                 },
                 selected: quality == conversion.audioQuality,
+                enabled: !conversion.converting,
                 onPressed: () => conversion.selectAudioQuality(quality),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VideoQualitySelector extends StatelessWidget {
+  const _VideoQualitySelector({required this.conversion});
+
+  final ConversionController conversion;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.all(MfSpacing.xxs),
+      decoration: BoxDecoration(
+        color: MfPalette.background,
+        borderRadius: BorderRadius.circular(MfRadius.md),
+        border: Border.all(color: MfPalette.border),
+      ),
+      child: Row(
+        children: [
+          for (final quality in ConversionVideoQuality.values)
+            Expanded(
+              child: _ModeOption(
+                key: Key('video-quality-${quality.name}'),
+                label: switch (quality) {
+                  ConversionVideoQuality.smaller => strings.smaller,
+                  ConversionVideoQuality.balanced => strings.balanced,
+                  ConversionVideoQuality.high => strings.highQuality,
+                },
+                selected: quality == conversion.videoQuality,
+                enabled: !conversion.converting,
+                onPressed: () => conversion.selectVideoQuality(quality),
               ),
             ),
         ],
@@ -1812,11 +1868,13 @@ class _ModeOption extends StatefulWidget {
     required this.label,
     required this.selected,
     required this.onPressed,
+    this.enabled = true,
     super.key,
   });
 
   final String label;
   final bool selected;
+  final bool enabled;
   final VoidCallback onPressed;
 
   @override
@@ -1840,15 +1898,18 @@ class _ModeOptionState extends State<_ModeOption> {
     final highlighted = widget.selected || _hovered || _pressed || _focused;
     return Semantics(
       button: true,
+      enabled: widget.enabled,
       selected: widget.selected,
       label: widget.label,
       excludeSemantics: true,
-      onTap: widget.onPressed,
+      onTap: widget.enabled ? widget.onPressed : null,
       child: Focus(
         focusNode: _focusNode,
+        canRequestFocus: widget.enabled,
         onFocusChange: (bool focused) => setState(() => _focused = focused),
         onKeyEvent: (FocusNode node, KeyEvent event) {
-          if (event is KeyDownEvent &&
+          if (widget.enabled &&
+              event is KeyDownEvent &&
               (event.logicalKey == LogicalKeyboardKey.enter ||
                   event.logicalKey == LogicalKeyboardKey.space)) {
             widget.onPressed();
@@ -1857,7 +1918,9 @@ class _ModeOptionState extends State<_ModeOption> {
           return KeyEventResult.ignored;
         },
         child: MouseRegion(
-          cursor: SystemMouseCursors.click,
+          cursor: widget.enabled
+              ? SystemMouseCursors.click
+              : SystemMouseCursors.basic,
           onEnter: (_) => setState(() => _hovered = true),
           onExit: (_) => setState(() => _hovered = false),
           child: Listener(
@@ -1866,10 +1929,12 @@ class _ModeOptionState extends State<_ModeOption> {
             onPointerCancel: (_) => setState(() => _pressed = false),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () {
-                _focusNode.requestFocus();
-                widget.onPressed();
-              },
+              onTap: widget.enabled
+                  ? () {
+                      _focusNode.requestFocus();
+                      widget.onPressed();
+                    }
+                  : null,
               child: AnimatedContainer(
                 duration: MfMotion.fast,
                 height: 30,
@@ -2143,27 +2208,29 @@ class _ModePresentation {
 
   factory _ModePresentation.fromMode(
     MediaOutputMode mode,
-    ConversionAudioQuality quality,
+    ConversionVideoQuality videoQuality,
+    ConversionAudioQuality audioQuality,
+    int selectedDurationMs,
     MfStrings strings,
   ) {
     return switch (mode) {
       MediaOutputMode.videoWithAudio => _ModePresentation(
         container: 'MP4',
-        video: 'H.264 · Hardware',
+        video: 'H.264 · ${_videoQualityLabel(videoQuality, strings)}',
         audio: 'AAC · 160 kbps',
-        estimatedSize: '8–10 MB',
+        estimatedSize: strings.dependsOnContent,
       ),
       MediaOutputMode.videoOnly => _ModePresentation(
         container: 'MP4',
-        video: 'H.264 · Hardware',
+        video: 'H.264 · ${_videoQualityLabel(videoQuality, strings)}',
         audio: strings.none,
-        estimatedSize: '7–9 MB',
+        estimatedSize: strings.dependsOnContent,
       ),
       MediaOutputMode.audioOnly => _ModePresentation(
         container: 'MP3',
         video: strings.none,
-        audio: 'MP3 · ${_audioQualityBitrate(quality)}',
-        estimatedSize: '1–2 MB',
+        audio: 'MP3 · ${_audioQualityBitrate(audioQuality)}',
+        estimatedSize: _estimatedMp3Size(audioQuality, selectedDurationMs),
       ),
     };
   }
@@ -2221,6 +2288,26 @@ String _audioQualityBitrate(ConversionAudioQuality quality) =>
       ConversionAudioQuality.medium => '192 kbps',
       ConversionAudioQuality.low => '128 kbps',
     };
+
+String _videoQualityLabel(ConversionVideoQuality quality, MfStrings strings) =>
+    switch (quality) {
+      ConversionVideoQuality.smaller => strings.smaller,
+      ConversionVideoQuality.balanced => strings.balanced,
+      ConversionVideoQuality.high => strings.highQuality,
+    };
+
+String _estimatedMp3Size(
+  ConversionAudioQuality quality,
+  int selectedDurationMs,
+) {
+  final bitrate = switch (quality) {
+    ConversionAudioQuality.high => 256000,
+    ConversionAudioQuality.medium => 192000,
+    ConversionAudioQuality.low => 128000,
+  };
+  final megabytes = selectedDurationMs * bitrate / 8000 / 1000000;
+  return '≈ ${megabytes.toStringAsFixed(megabytes < 10 ? 1 : 0)} MB';
+}
 
 String _localizedAction(MfStrings strings, MediaOutputMode mode) =>
     switch (mode) {

@@ -13,5 +13,5 @@ pub use media::{
     cancel_transcode, default_output_path, initialize_backend, job_events, probe_media,
     start_transcode, AudioStreamInfoDto, BackendCapabilitiesDto, JobEventDto, JobEventKindDto,
     JobSnapshotDto, JobStateDto, MediaAudioQuality, MediaBridgeError, MediaBridgeErrorCode,
-    MediaInfoDto, MediaOutputMode, StartTranscodeRequestDto, VideoStreamInfoDto,
+    MediaInfoDto, MediaOutputMode, MediaVideoQuality, StartTranscodeRequestDto, VideoStreamInfoDto,
 };
