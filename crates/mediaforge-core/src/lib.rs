@@ -156,6 +156,52 @@ impl AudioQuality {
     }
 }
 
+/// A validated media playback rate represented as an integer percentage.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PlaybackRate(u16);
+
+impl PlaybackRate {
+    /// Lowest supported playback rate percentage.
+    pub const MIN_PERCENT: u16 = 25;
+    /// Highest supported playback rate percentage.
+    pub const MAX_PERCENT: u16 = 400;
+    /// Supported percentage increment.
+    pub const STEP_PERCENT: u16 = 5;
+
+    /// Creates a playback rate accepted by every `MediaForge` boundary.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MediaError::InvalidPlaybackRate`] when `percent` is outside
+    /// 25 through 400 or is not aligned to a five-percent increment.
+    pub fn new(percent: u16) -> Result<Self, MediaError> {
+        if !(Self::MIN_PERCENT..=Self::MAX_PERCENT).contains(&percent)
+            || !percent.is_multiple_of(Self::STEP_PERCENT)
+        {
+            return Err(MediaError::InvalidPlaybackRate { percent });
+        }
+        Ok(Self(percent))
+    }
+
+    /// Returns the integer percentage used by boundary and timestamp math.
+    #[must_use]
+    pub const fn percent(self) -> u16 {
+        self.0
+    }
+
+    /// Returns the rate as a floating-point multiplier for media libraries.
+    #[must_use]
+    pub fn multiplier(self) -> f64 {
+        f64::from(self.0) / 100.0
+    }
+}
+
+impl Default for PlaybackRate {
+    fn default() -> Self {
+        Self(100)
+    }
+}
+
 /// A validated half-open time range in milliseconds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TrimRange {
@@ -216,6 +262,10 @@ pub struct TranscodeRequest {
     pub video_quality: VideoQuality,
     /// MP3 quality used for audio-only output.
     pub audio_quality: AudioQuality,
+    /// Playback rate applied to outputs containing video.
+    pub video_playback_rate: PlaybackRate,
+    /// Playback rate applied to outputs containing audio.
+    pub audio_playback_rate: PlaybackRate,
     /// Whether an existing destination may be replaced after successful encoding.
     pub overwrite: bool,
 }
@@ -339,6 +389,12 @@ pub enum MediaError {
         /// Input duration.
         duration_ms: u64,
     },
+    /// A playback rate falls outside the supported range or increment.
+    #[error("invalid playback rate: {percent}%")]
+    InvalidPlaybackRate {
+        /// Requested integer percentage.
+        percent: u16,
+    },
     /// The destination already exists and overwrite was not approved.
     #[error("output already exists: {0}")]
     OutputExists(PathBuf),
@@ -444,6 +500,26 @@ mod tests {
         assert_eq!(AudioQuality::High.bitrate(), 256_000);
         assert_eq!(AudioQuality::Medium.bitrate(), 192_000);
         assert_eq!(AudioQuality::Low.bitrate(), 128_000);
+    }
+
+    #[test]
+    fn playback_rate_accepts_supported_boundaries_and_rejects_invalid_steps() {
+        assert_eq!(
+            PlaybackRate::new(PlaybackRate::MIN_PERCENT)
+                .map(PlaybackRate::percent)
+                .ok(),
+            Some(25)
+        );
+        assert_eq!(
+            PlaybackRate::new(PlaybackRate::MAX_PERCENT)
+                .map(PlaybackRate::percent)
+                .ok(),
+            Some(400)
+        );
+        assert_eq!(PlaybackRate::default().percent(), 100);
+        assert!(PlaybackRate::new(24).is_err());
+        assert!(PlaybackRate::new(101).is_err());
+        assert!(PlaybackRate::new(405).is_err());
     }
 
     #[test]

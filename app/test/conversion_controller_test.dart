@@ -40,6 +40,8 @@ void main() {
     expect(request.outputPath, '/tmp/source.mp4');
     expect(request.mode, MediaOutputMode.videoWithAudio);
     expect(request.videoQuality, ConversionVideoQuality.balanced);
+    expect(request.videoPlaybackRatePercent, 100);
+    expect(request.audioPlaybackRatePercent, 100);
     expect(request.startMs, 200);
     expect(request.endMs, 1200);
     expect(request.overwrite, isFalse);
@@ -57,6 +59,65 @@ void main() {
     expect(controller.completedOutputPath, '/tmp/source.mp4');
     expect(controller.failure, isNull);
   });
+
+  test(
+    'playback rates link, separate, survive modes, and reset per source',
+    () async {
+      final conversionService = _FakeConversionService();
+      final controller = ConversionController(
+        service: conversionService,
+        outputPathService: _FakeProbeService('/tmp/source.mp4'),
+      );
+      addTearDown(() async {
+        await controller.close();
+        controller.dispose();
+        await conversionService.close();
+      });
+      controller.setMedia(_media());
+      await _drainEvents();
+
+      expect(controller.playbackRatesLinked, isTrue);
+      expect(controller.videoPlaybackRatePercent, 100);
+      expect(controller.audioPlaybackRatePercent, 100);
+      controller.selectVideoPlaybackRate(125);
+      expect(controller.videoPlaybackRatePercent, 125);
+      expect(controller.audioPlaybackRatePercent, 125);
+
+      controller.setPlaybackRatesLinked(false);
+      controller.selectVideoPlaybackRate(150);
+      controller.selectAudioPlaybackRate(75);
+      expect(controller.showIndependentPreviewWarning, isTrue);
+      expect(controller.previewPlaybackRatePercent, 150);
+
+      controller.selectMode(MediaOutputMode.audioOnly);
+      await _drainEvents();
+      expect(controller.videoPlaybackRatePercent, 150);
+      expect(controller.audioPlaybackRatePercent, 75);
+      expect(controller.previewPlaybackRatePercent, 75);
+      expect(controller.showIndependentPreviewWarning, isFalse);
+
+      controller.selectMode(MediaOutputMode.videoWithAudio);
+      await _drainEvents();
+      controller.setPlaybackRatesLinked(true);
+      expect(controller.videoPlaybackRatePercent, 150);
+      expect(controller.audioPlaybackRatePercent, 150);
+      expect(controller.showIndependentPreviewWarning, isFalse);
+
+      controller.setMedia(_media());
+      await _drainEvents();
+      expect(controller.playbackRatesLinked, isTrue);
+      expect(controller.videoPlaybackRatePercent, 100);
+      expect(controller.audioPlaybackRatePercent, 100);
+      expect(
+        () => controller.selectVideoPlaybackRate(101),
+        throwsArgumentError,
+      );
+      expect(
+        () => controller.selectAudioPlaybackRate(405),
+        throwsArgumentError,
+      );
+    },
+  );
 
   test(
     'terminal event arriving before start response remains correlated',
@@ -337,17 +398,24 @@ void main() {
         await conversionService.close();
       });
       controller.setMedia(_media());
+      controller.setPlaybackRatesLinked(false);
+      controller.selectVideoPlaybackRate(150);
+      controller.selectAudioPlaybackRate(75);
       await _drainEvents();
 
       await controller.start(startMs: 100, endMs: 1200);
       expect(controller.overwriteConfirmationRequired, isTrue);
       expect(conversionService.requests.single.overwrite, isFalse);
+      expect(conversionService.requests.single.videoPlaybackRatePercent, 150);
+      expect(conversionService.requests.single.audioPlaybackRatePercent, 75);
 
       await controller.confirmOverwrite();
       expect(controller.overwriteConfirmationRequired, isFalse);
       expect(conversionService.requests.last.overwrite, isTrue);
       expect(conversionService.requests.last.startMs, 100);
       expect(conversionService.requests.last.endMs, 1200);
+      expect(conversionService.requests.last.videoPlaybackRatePercent, 150);
+      expect(conversionService.requests.last.audioPlaybackRatePercent, 75);
       conversionService.emit(
         const ConversionJobEvent(
           kind: ConversionJobEventKind.completed,

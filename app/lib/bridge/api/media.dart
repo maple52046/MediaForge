@@ -352,6 +352,9 @@ enum MediaBridgeErrorCode {
   /// A trim range violates source bounds.
   invalidTrimRange,
 
+  /// A playback rate violates supported bounds or increments.
+  invalidPlaybackRate,
+
   /// The destination exists without overwrite approval.
   outputExists,
 
@@ -469,6 +472,8 @@ class StartTranscodeRequestDto {
     required this.mode,
     required this.videoQuality,
     required this.audioQuality,
+    required this.videoPlaybackRatePercent,
+    required this.audioPlaybackRatePercent,
     required this.startMs,
     required this.endMs,
     required this.overwrite,
@@ -489,6 +494,12 @@ class StartTranscodeRequestDto {
   /// MP3 quality used when the selected recipe is audio-only.
   final MediaAudioQuality audioQuality;
 
+  /// Video playback rate as a validated integer percentage.
+  final int videoPlaybackRatePercent;
+
+  /// Audio playback rate as a validated integer percentage.
+  final int audioPlaybackRatePercent;
+
   /// Inclusive trim start in integer milliseconds.
   final int startMs;
 
@@ -505,6 +516,8 @@ class StartTranscodeRequestDto {
       mode.hashCode ^
       videoQuality.hashCode ^
       audioQuality.hashCode ^
+      videoPlaybackRatePercent.hashCode ^
+      audioPlaybackRatePercent.hashCode ^
       startMs.hashCode ^
       endMs.hashCode ^
       overwrite.hashCode;
@@ -519,6 +532,8 @@ class StartTranscodeRequestDto {
           mode == other.mode &&
           videoQuality == other.videoQuality &&
           audioQuality == other.audioQuality &&
+          videoPlaybackRatePercent == other.videoPlaybackRatePercent &&
+          audioPlaybackRatePercent == other.audioPlaybackRatePercent &&
           startMs == other.startMs &&
           endMs == other.endMs &&
           overwrite == other.overwrite;

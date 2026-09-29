@@ -16,6 +16,7 @@ void main() {
     expect(preview.availability, PreviewAvailability.ready);
     expect(driver.openedSource, 'asset:///test/fixtures/preview-hevc.mp4');
     expect(driver.volumeCommands, <int>[78]);
+    expect(driver.playbackRateCommands, <double>[1]);
 
     driver.durationController.add(2000);
     driver.positionController.add(625);
@@ -30,10 +31,14 @@ void main() {
     preview.togglePlayback();
     preview.seek(2500);
     preview.setVolume(150);
+    preview.setPlaybackRate(1.25);
     await _drainEvents();
     expect(driver.pauseCount, 1);
     expect(driver.seekCommands, <int>[2000]);
     expect(driver.volumeCommands, <int>[78, 100]);
+    expect(preview.playbackRate, 1.25);
+    expect(driver.playbackRateCommands, <double>[1, 1.25]);
+    expect(() => preview.setPlaybackRate(4.05), throwsArgumentError);
 
     driver.playingController.add(false);
     await _drainEvents();
@@ -172,6 +177,7 @@ class _FakePreviewPlaybackDriver implements PreviewPlaybackDriver {
   int playCount = 0;
   int pauseCount = 0;
   int closeCount = 0;
+  final List<double> playbackRateCommands = <double>[];
 
   @override
   Stream<bool> get completed => completedController.stream;
@@ -231,5 +237,10 @@ class _FakePreviewPlaybackDriver implements PreviewPlaybackDriver {
   @override
   Future<void> setVolume(int volumePercent) async {
     volumeCommands.add(volumePercent);
+  }
+
+  @override
+  Future<void> setPlaybackRate(double rate) async {
+    playbackRateCommands.add(rate);
   }
 }

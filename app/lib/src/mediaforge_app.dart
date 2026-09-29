@@ -109,6 +109,7 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
   String? _previewSourcePath;
   String? _timelineSourcePath;
   String? _conversionSourcePath;
+  int? _appliedPreviewRatePercent;
   late final TimelineController _timeline;
   late final ConversionController _conversion;
   late final SettingsController _settings;
@@ -241,11 +242,23 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
       _previewSourcePath = media.path;
     });
     _preview.addListener(_handlePreviewChange);
+    _appliedPreviewRatePercent = null;
+    _applyPreviewPlaybackRate();
     previousPreview.dispose();
   }
 
   void _handleConversionChange() {
     _mediaSession.setSourceChangesAllowed(!_conversion.converting);
+    _applyPreviewPlaybackRate();
+  }
+
+  void _applyPreviewPlaybackRate() {
+    final percent = _conversion.previewPlaybackRatePercent;
+    if (_appliedPreviewRatePercent == percent) {
+      return;
+    }
+    _appliedPreviewRatePercent = percent;
+    _preview.setPlaybackRate(ConversionPlaybackRate.multiplier(percent));
   }
 
   void _handleSettingsChange() {
@@ -263,6 +276,8 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
       _previewSourcePath = null;
     });
     _preview.addListener(_handlePreviewChange);
+    _appliedPreviewRatePercent = null;
+    _applyPreviewPlaybackRate();
     previousPreview.dispose();
   }
 

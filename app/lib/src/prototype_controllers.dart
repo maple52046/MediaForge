@@ -5,6 +5,7 @@ class PreviewPrototypeController extends PreviewController {
   bool _playing = false;
   int _positionMs = 842;
   int _volumePercent = 78;
+  double _playbackRate = 1;
   int? _selectionEndMs;
 
   @override
@@ -27,6 +28,10 @@ class PreviewPrototypeController extends PreviewController {
   /// Current fake preview volume from zero through one hundred.
   @override
   int get volumePercent => _volumePercent;
+
+  /// Current fake preview playback-rate multiplier.
+  @override
+  double get playbackRate => _playbackRate;
 
   /// Toggles fake preview playback.
   @override
@@ -84,6 +89,19 @@ class PreviewPrototypeController extends PreviewController {
       return;
     }
     _volumePercent = next;
+    notifyListeners();
+  }
+
+  /// Updates fake playback speed without moving the playhead.
+  @override
+  void setPlaybackRate(double rate) {
+    if (!rate.isFinite || rate < 0.25 || rate > 4) {
+      throw ArgumentError.value(rate, 'rate', 'must be between 0.25 and 4.0');
+    }
+    if (_playbackRate == rate) {
+      return;
+    }
+    _playbackRate = rate;
     notifyListeners();
   }
 }

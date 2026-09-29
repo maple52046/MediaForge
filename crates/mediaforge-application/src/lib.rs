@@ -85,6 +85,8 @@ pub enum ErrorCode {
     EncoderUnavailable,
     /// The selected range violates media bounds.
     InvalidTrimRange,
+    /// A requested playback rate violates supported bounds or increments.
+    InvalidPlaybackRate,
     /// The destination exists without overwrite approval.
     OutputExists,
     /// The temporary destination could not be created.
@@ -111,6 +113,7 @@ impl ErrorCode {
             Self::DecodeFailed => "decodeFailed",
             Self::EncoderUnavailable => "encoderUnavailable",
             Self::InvalidTrimRange => "invalidTrimRange",
+            Self::InvalidPlaybackRate => "invalidPlaybackRate",
             Self::OutputExists => "outputExists",
             Self::OutputCreateFailed => "outputCreateFailed",
             Self::DiskWriteFailed => "diskWriteFailed",
@@ -156,6 +159,7 @@ impl From<MediaError> for ApplicationError {
             MediaError::DecodeFailed(_) => ErrorCode::DecodeFailed,
             MediaError::EncoderUnavailable(_) => ErrorCode::EncoderUnavailable,
             MediaError::InvalidTrimRange { .. } => ErrorCode::InvalidTrimRange,
+            MediaError::InvalidPlaybackRate { .. } => ErrorCode::InvalidPlaybackRate,
             MediaError::OutputExists(_) => ErrorCode::OutputExists,
             MediaError::OutputCreateFailed(_) => ErrorCode::OutputCreateFailed,
             MediaError::DiskWriteFailed(_) => ErrorCode::DiskWriteFailed,
@@ -469,7 +473,8 @@ mod tests {
     use std::sync::Condvar;
 
     use mediaforge_core::{
-        AudioQuality, BackendCapabilities, MediaInfo, OutputMode, TrimRange, VideoQuality,
+        AudioQuality, BackendCapabilities, MediaInfo, OutputMode, PlaybackRate, TrimRange,
+        VideoQuality,
     };
 
     use super::*;
@@ -601,6 +606,8 @@ mod tests {
             trim: TrimRange::new(0, 1_000, 1_000).unwrap_or_else(|error| panic!("{error}")),
             video_quality: VideoQuality::Balanced,
             audio_quality: AudioQuality::Medium,
+            video_playback_rate: PlaybackRate::default(),
+            audio_playback_rate: PlaybackRate::default(),
             overwrite: false,
         }
     }

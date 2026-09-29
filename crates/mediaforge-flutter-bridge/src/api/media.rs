@@ -9,7 +9,8 @@ use mediaforge_application::{
 };
 use mediaforge_core::{
     propose_output_path, AudioQuality, AudioStreamInfo, BackendCapabilities, MediaBackend,
-    MediaError, MediaInfo, OutputMode, TranscodeRequest, TrimRange, VideoQuality, VideoStreamInfo,
+    MediaError, MediaInfo, OutputMode, PlaybackRate, TranscodeRequest, TrimRange, VideoQuality,
+    VideoStreamInfo,
 };
 use mediaforge_ffmpeg::FfmpegBackend;
 
@@ -106,6 +107,10 @@ pub struct StartTranscodeRequestDto {
     pub video_quality: MediaVideoQuality,
     /// MP3 quality used when the selected recipe is audio-only.
     pub audio_quality: MediaAudioQuality,
+    /// Video playback rate as a validated integer percentage.
+    pub video_playback_rate_percent: u16,
+    /// Audio playback rate as a validated integer percentage.
+    pub audio_playback_rate_percent: u16,
     /// Inclusive trim start in integer milliseconds.
     pub start_ms: u64,
     /// Exclusive trim end in integer milliseconds.
@@ -216,6 +221,8 @@ pub enum MediaBridgeErrorCode {
     EncoderUnavailable,
     /// A trim range violates source bounds.
     InvalidTrimRange,
+    /// A playback rate violates supported bounds or increments.
+    InvalidPlaybackRate,
     /// The destination exists without overwrite approval.
     OutputExists,
     /// A protected temporary output could not be created.
@@ -472,6 +479,8 @@ fn build_transcode_request(
         mode,
         video_quality,
         audio_quality,
+        video_playback_rate_percent,
+        audio_playback_rate_percent,
         start_ms,
         end_ms,
         overwrite,
@@ -488,6 +497,10 @@ fn build_transcode_request(
         trim,
         video_quality: video_quality.into(),
         audio_quality: audio_quality.into(),
+        video_playback_rate: PlaybackRate::new(video_playback_rate_percent)
+            .map_err(ApplicationError::from)?,
+        audio_playback_rate: PlaybackRate::new(audio_playback_rate_percent)
+            .map_err(ApplicationError::from)?,
         overwrite,
     })
 }
@@ -743,6 +756,7 @@ impl From<ErrorCode> for MediaBridgeErrorCode {
             ErrorCode::DecodeFailed => Self::DecodeFailed,
             ErrorCode::EncoderUnavailable => Self::EncoderUnavailable,
             ErrorCode::InvalidTrimRange => Self::InvalidTrimRange,
+            ErrorCode::InvalidPlaybackRate => Self::InvalidPlaybackRate,
             ErrorCode::OutputExists => Self::OutputExists,
             ErrorCode::OutputCreateFailed => Self::OutputCreateFailed,
             ErrorCode::DiskWriteFailed => Self::DiskWriteFailed,
@@ -837,6 +851,8 @@ mod tests {
         assert_eq!(domain.mode, OutputMode::VideoWithAudio);
         assert_eq!(domain.video_quality, VideoQuality::Balanced);
         assert_eq!(domain.audio_quality, AudioQuality::Medium);
+        assert_eq!(domain.video_playback_rate.percent(), 100);
+        assert_eq!(domain.audio_playback_rate.percent(), 100);
         assert!(!domain.overwrite);
 
         let invalid_trim = build_transcode_request(
@@ -851,6 +867,18 @@ mod tests {
         )
         .expect_err("an empty trim must remain a structured domain failure");
         assert_eq!(invalid_trim.code, MediaBridgeErrorCode::InvalidTrimRange);
+
+        let invalid_rate = build_transcode_request(
+            StartTranscodeRequestDto {
+                video_playback_rate_percent: 101,
+                ..request.clone()
+            },
+            PathBuf::from("/tmp/input.mov"),
+            PathBuf::from("/tmp/output.mp4"),
+            &media,
+        )
+        .expect_err("a playback rate outside the five-percent step must fail");
+        assert_eq!(invalid_rate.code, MediaBridgeErrorCode::InvalidPlaybackRate);
 
         let video_only = build_transcode_request(
             StartTranscodeRequestDto {
@@ -935,6 +963,8 @@ mod tests {
             mode: MediaOutputMode::VideoWithAudio,
             video_quality: MediaVideoQuality::Balanced,
             audio_quality: MediaAudioQuality::Medium,
+            video_playback_rate_percent: 100,
+            audio_playback_rate_percent: 100,
             start_ms: 200,
             end_ms: 1_200,
             overwrite: false,

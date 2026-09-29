@@ -32,6 +32,9 @@ abstract class PreviewController extends ChangeNotifier {
   /// Current preview volume from zero through one hundred.
   int get volumePercent;
 
+  /// Current source playback-rate multiplier.
+  double get playbackRate;
+
   /// Diagnostic detail retained for logs when preview is unavailable.
   String? get diagnostic;
 
@@ -46,4 +49,7 @@ abstract class PreviewController extends ChangeNotifier {
 
   /// Sets preview volume after constraining it to a percentage.
   void setVolume(int volumePercent);
+
+  /// Applies a positive playback-rate multiplier without changing position.
+  void setPlaybackRate(double rate);
 }

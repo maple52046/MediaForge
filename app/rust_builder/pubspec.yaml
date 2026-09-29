@@ -1,6 +1,6 @@
 name: mediaforge_flutter_bridge
 description: Cargokit build adapter for the MediaForge Rust bridge.
-version: 0.2.0
+version: 0.2.1
 publish_to: none
 
 environment:

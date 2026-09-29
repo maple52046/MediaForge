@@ -69,7 +69,7 @@ bash scripts/verify-flutter-macos-bundle.sh
 
 The artifacts are written to
 `target/release/bundle/macos/MediaForge.app` and
-`target/release/bundle/dmg/MediaForge_0.2.0_aarch64.dmg`.
+`target/release/bundle/dmg/MediaForge_0.2.1_aarch64.dmg`.
 
 See [Third-party notices](THIRD_PARTY_NOTICES.md) and
 [macOS distribution](docs/distribution/macos.md) for licensing, clean-machine

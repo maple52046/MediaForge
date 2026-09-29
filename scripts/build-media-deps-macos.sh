@@ -19,7 +19,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
-  echo "MediaForge 0.2.0 media dependencies require Apple Silicon macOS." >&2
+  echo "MediaForge 0.2.1 media dependencies require Apple Silicon macOS." >&2
   exit 1
 fi
 

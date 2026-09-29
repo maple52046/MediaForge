@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mediaforge_core::{
-    AudioQuality, Cancellation, MediaBackend, MediaError, OutputMode, ProgressObserver,
-    ProgressUpdate, TranscodeRequest, TrimRange, VideoQuality,
+    AudioQuality, Cancellation, MediaBackend, MediaError, OutputMode, PlaybackRate,
+    ProgressObserver, ProgressUpdate, TranscodeRequest, TrimRange, VideoQuality,
 };
 use mediaforge_ffmpeg::FfmpegBackend;
 
@@ -90,6 +90,8 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
                     trim,
                     video_quality: VideoQuality::Balanced,
                     audio_quality: quality,
+                    video_playback_rate: PlaybackRate::default(),
+                    audio_playback_rate: PlaybackRate::default(),
                     overwrite: false,
                 },
                 &progress,
@@ -117,6 +119,8 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
             trim,
             video_quality: VideoQuality::Balanced,
             audio_quality: AudioQuality::Medium,
+            video_playback_rate: PlaybackRate::default(),
+            audio_playback_rate: PlaybackRate::default(),
             overwrite: false,
         },
         &RecordedProgress::default(),
@@ -130,6 +134,86 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
         .filter(|entry| entry.file_name().to_string_lossy().contains(".part."))
         .count();
     assert_eq!(partial_count, 0);
+}
+
+#[test]
+#[ignore = "requires the developer-only FFmpeg CLI and macOS VideoToolbox"]
+fn playback_rates_change_duration_and_preserve_the_longer_stream() {
+    let workspace = tempfile::tempdir().expect("test workspace must be created");
+    let source = workspace.path().join("source.mp4");
+    generate_fixture(&source);
+    let backend = FfmpegBackend::new().expect("FFmpeg must initialize");
+    let source_info = backend.probe(&source).expect("fixture must be probed");
+    let trim = TrimRange::new(250, 1_250, source_info.duration_ms)
+        .expect("fixture must contain the test selection");
+
+    for (name, mode, video_rate, audio_rate, expected_duration) in [
+        (
+            "synchronized-fast.mp4",
+            OutputMode::VideoWithAudio,
+            200,
+            200,
+            350..=750,
+        ),
+        (
+            "synchronized-slow.mp4",
+            OutputMode::VideoWithAudio,
+            50,
+            50,
+            1_700..=2_300,
+        ),
+        (
+            "independent.mp4",
+            OutputMode::VideoWithAudio,
+            200,
+            50,
+            1_700..=2_300,
+        ),
+        ("video-fast.mp4", OutputMode::VideoOnly, 400, 100, 150..=450),
+        (
+            "audio-slow.mp3",
+            OutputMode::AudioOnly,
+            100,
+            25,
+            3_500..=4_500,
+        ),
+    ] {
+        let output = workspace.path().join(name);
+        let progress = RecordedProgress::default();
+        backend
+            .transcode(
+                &TranscodeRequest {
+                    input_path: source.clone(),
+                    output_path: output.clone(),
+                    mode,
+                    trim,
+                    video_quality: VideoQuality::Balanced,
+                    audio_quality: AudioQuality::Medium,
+                    video_playback_rate: PlaybackRate::new(video_rate)
+                        .expect("test video rate must be valid"),
+                    audio_playback_rate: PlaybackRate::new(audio_rate)
+                        .expect("test audio rate must be valid"),
+                    overwrite: false,
+                },
+                &progress,
+                Arc::new(NeverCancelled),
+            )
+            .unwrap_or_else(|error| panic!("{name} transcode failed: {error}"));
+        let output_info = backend.probe(&output).expect("output must be probed");
+        assert!(
+            expected_duration.contains(&output_info.duration_ms),
+            "{name} duration {} was outside {expected_duration:?}",
+            output_info.duration_ms
+        );
+        assert_eq!(output_info.video.is_some(), mode != OutputMode::AudioOnly);
+        assert_eq!(output_info.audio.is_some(), mode != OutputMode::VideoOnly);
+        assert!(progress
+            .samples
+            .lock()
+            .expect("progress lock must remain healthy")
+            .last()
+            .is_some_and(|sample| (sample.percent() - 100.0).abs() < f64::EPSILON));
+    }
 }
 
 #[test]
@@ -162,6 +246,8 @@ fn video_quality_outputs_have_monotonic_sizes() {
                     trim,
                     video_quality,
                     audio_quality: AudioQuality::Medium,
+                    video_playback_rate: PlaybackRate::default(),
+                    audio_playback_rate: PlaybackRate::default(),
                     overwrite: false,
                 },
                 &RecordedProgress::default(),
@@ -227,6 +313,8 @@ fn validates_representative_user_media_without_mutating_the_source() {
                     trim,
                     video_quality: VideoQuality::Balanced,
                     audio_quality: quality,
+                    video_playback_rate: PlaybackRate::default(),
+                    audio_playback_rate: PlaybackRate::default(),
                     overwrite: false,
                 },
                 &RecordedProgress::default(),
@@ -248,6 +336,8 @@ fn validates_representative_user_media_without_mutating_the_source() {
             trim,
             video_quality: VideoQuality::Balanced,
             audio_quality: AudioQuality::Medium,
+            video_playback_rate: PlaybackRate::default(),
+            audio_playback_rate: PlaybackRate::default(),
             overwrite: false,
         },
         cancellation.as_ref(),
@@ -301,6 +391,8 @@ fn validates_balanced_quality_reference_size_and_bitrate() {
                 trim,
                 video_quality: VideoQuality::Balanced,
                 audio_quality: AudioQuality::Medium,
+                video_playback_rate: PlaybackRate::default(),
+                audio_playback_rate: PlaybackRate::default(),
                 overwrite: false,
             },
             &RecordedProgress::default(),

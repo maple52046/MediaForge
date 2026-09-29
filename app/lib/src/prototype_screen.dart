@@ -674,6 +674,7 @@ class _LoadedWorkspace extends StatelessWidget {
             preview: preview,
             nativePreviewSurface: nativePreviewSurface,
             timeline: timeline,
+            conversion: conversion,
           ),
         ),
         SizedBox(
@@ -695,11 +696,13 @@ class _PreviewColumn extends StatelessWidget {
     required this.preview,
     required this.nativePreviewSurface,
     required this.timeline,
+    required this.conversion,
   });
 
   final PreviewController preview;
   final Widget? nativePreviewSurface;
   final TimelineController timeline;
+  final ConversionController conversion;
 
   @override
   Widget build(BuildContext context) {
@@ -719,6 +722,12 @@ class _PreviewColumn extends StatelessWidget {
               timeline: timeline,
             ),
           ),
+          if (conversion.showIndependentPreviewWarning) ...[
+            const SizedBox(height: MfSpacing.sm),
+            _IndependentSpeedPreviewWarning(
+              message: MfStrings.of(context).independentSpeedPreviewWarning,
+            ),
+          ],
           const SizedBox(height: MfSpacing.md),
           SizedBox(
             key: const Key('timeline-panel'),
@@ -726,6 +735,37 @@ class _PreviewColumn extends StatelessWidget {
             child: _TimelinePanel(preview: preview, timeline: timeline),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _IndependentSpeedPreviewWarning extends StatelessWidget {
+  const _IndependentSpeedPreviewWarning({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      label: message,
+      child: Container(
+        key: const Key('independent-speed-preview-warning'),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          horizontal: MfSpacing.sm,
+          vertical: MfSpacing.xs,
+        ),
+        decoration: BoxDecoration(
+          color: MfPalette.elevated,
+          borderRadius: BorderRadius.circular(MfRadius.md),
+          border: Border.all(color: MfPalette.accent),
+        ),
+        child: Text(
+          message,
+          style: TextStyle(color: MfPalette.foreground, fontSize: 11),
+        ),
       ),
     );
   }
@@ -1376,6 +1416,7 @@ class _ReadyContent extends StatelessWidget {
       conversion.mode,
       conversion.videoQuality,
       conversion.audioQuality,
+      conversion.audioPlaybackRatePercent,
       timeline.selectedDurationMs,
       MfStrings.of(context),
     );
@@ -1384,7 +1425,7 @@ class _ReadyContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _PaneTitle(title: strings.export, caption: strings.exportCaption),
-        const SizedBox(height: MfSpacing.lg),
+        const SizedBox(height: MfSpacing.md),
         _SectionLabel(strings.source),
         const SizedBox(height: MfSpacing.xs),
         _SourceSummary(
@@ -1393,26 +1434,27 @@ class _ReadyContent extends StatelessWidget {
           onReplace: mediaSession.chooseSource,
           onClear: mediaSession.clearSource,
         ),
-        const SizedBox(height: MfSpacing.lg),
+        const SizedBox(height: MfSpacing.sm),
         _SectionLabel(strings.outputMode),
         const SizedBox(height: MfSpacing.xs),
         _SegmentedModes(conversion: conversion),
-        const SizedBox(height: MfSpacing.md),
+        const SizedBox(height: MfSpacing.sm),
         _OptionRow(label: strings.container, value: values.container),
         _OptionRow(label: strings.video, value: values.video),
         _OptionRow(label: strings.audio, value: values.audio),
+        _PlaybackSpeedControl(conversion: conversion),
         if (conversion.mode != MediaOutputMode.audioOnly) ...[
-          const SizedBox(height: MfSpacing.md),
+          const SizedBox(height: MfSpacing.sm),
           _SectionLabel(strings.videoQuality),
           const SizedBox(height: MfSpacing.xs),
           _VideoQualitySelector(conversion: conversion),
         ] else ...[
-          const SizedBox(height: MfSpacing.md),
+          const SizedBox(height: MfSpacing.sm),
           _SectionLabel(strings.mp3Quality),
           const SizedBox(height: MfSpacing.xs),
           _AudioQualitySelector(conversion: conversion),
         ],
-        const SizedBox(height: MfSpacing.sm),
+        const SizedBox(height: MfSpacing.xs),
         _SectionLabel(strings.destination),
         const SizedBox(height: MfSpacing.xs),
         _DestinationEditor(conversion: conversion),
@@ -1994,6 +2036,325 @@ class _OptionRow extends StatelessWidget {
   }
 }
 
+class _PlaybackSpeedControl extends StatefulWidget {
+  const _PlaybackSpeedControl({required this.conversion});
+
+  final ConversionController conversion;
+
+  @override
+  State<_PlaybackSpeedControl> createState() => _PlaybackSpeedControlState();
+}
+
+class _PlaybackSpeedControlState extends State<_PlaybackSpeedControl> {
+  late final ShadPopoverController _popoverController;
+
+  @override
+  void initState() {
+    super.initState();
+    _popoverController = ShadPopoverController();
+  }
+
+  @override
+  void didUpdateWidget(_PlaybackSpeedControl oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.conversion.converting) {
+      _popoverController.hide();
+    }
+  }
+
+  @override
+  void dispose() {
+    _popoverController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
+    final summary = _playbackSpeedSummary(widget.conversion, strings);
+    return ShadPopover(
+      controller: _popoverController,
+      closeOnTapOutside: true,
+      padding: EdgeInsets.zero,
+      popover: (BuildContext context) =>
+          _PlaybackSpeedPopover(conversion: widget.conversion),
+      child: Semantics(
+        button: true,
+        label: '${strings.playbackSpeed}: $summary',
+        child: ShadButton.ghost(
+          key: const Key('playback-speed-settings'),
+          width: double.infinity,
+          height: 26,
+          padding: EdgeInsets.zero,
+          onPressed: widget.conversion.converting
+              ? null
+              : _popoverController.toggle,
+          child: SizedBox(
+            width: 320,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    strings.playbackSpeed,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: MfPalette.muted, fontSize: 11),
+                  ),
+                ),
+                const SizedBox(width: MfSpacing.sm),
+                Flexible(
+                  child: Text(
+                    summary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: TextStyle(color: MfPalette.foreground, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaybackSpeedPopover extends StatelessWidget {
+  const _PlaybackSpeedPopover({required this.conversion});
+
+  final ConversionController conversion;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
+    return Container(
+      key: const Key('playback-speed-popover'),
+      width: 328,
+      padding: const EdgeInsets.all(MfSpacing.md),
+      decoration: BoxDecoration(
+        color: MfPalette.elevated,
+        borderRadius: BorderRadius.circular(MfRadius.lg),
+        border: Border.all(color: MfPalette.accent),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            strings.playbackSpeed,
+            style: TextStyle(
+              color: MfPalette.foreground,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (conversion.mode == MediaOutputMode.videoWithAudio) ...[
+            const SizedBox(height: MfSpacing.sm),
+            Container(
+              height: 34,
+              padding: const EdgeInsets.all(MfSpacing.xxs),
+              decoration: BoxDecoration(
+                color: MfPalette.background,
+                borderRadius: BorderRadius.circular(MfRadius.md),
+                border: Border.all(color: MfPalette.border),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _ModeOption(
+                      key: const Key('speed-synchronized'),
+                      label: strings.synchronizedSpeed,
+                      selected: conversion.playbackRatesLinked,
+                      onPressed: () => conversion.setPlaybackRatesLinked(true),
+                    ),
+                  ),
+                  Expanded(
+                    child: _ModeOption(
+                      key: const Key('speed-independent'),
+                      label: strings.independentSpeed,
+                      selected: !conversion.playbackRatesLinked,
+                      onPressed: () => conversion.setPlaybackRatesLinked(false),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: MfSpacing.md),
+          if (conversion.mode == MediaOutputMode.audioOnly)
+            _PlaybackRateEditor(
+              controlKey: 'audio-speed',
+              label: strings.audioSpeed,
+              percent: conversion.audioPlaybackRatePercent,
+              onCommitted: conversion.selectAudioPlaybackRate,
+            )
+          else if (conversion.mode == MediaOutputMode.videoOnly ||
+              conversion.playbackRatesLinked)
+            _PlaybackRateEditor(
+              controlKey: 'video-speed',
+              label: conversion.mode == MediaOutputMode.videoOnly
+                  ? strings.videoSpeed
+                  : strings.synchronizedSpeed,
+              percent: conversion.videoPlaybackRatePercent,
+              onCommitted: conversion.selectVideoPlaybackRate,
+            )
+          else ...[
+            _PlaybackRateEditor(
+              controlKey: 'video-speed',
+              label: strings.videoSpeed,
+              percent: conversion.videoPlaybackRatePercent,
+              onCommitted: conversion.selectVideoPlaybackRate,
+            ),
+            const SizedBox(height: MfSpacing.md),
+            _PlaybackRateEditor(
+              controlKey: 'audio-speed',
+              label: strings.audioSpeed,
+              percent: conversion.audioPlaybackRatePercent,
+              onCommitted: conversion.selectAudioPlaybackRate,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PlaybackRateEditor extends StatefulWidget {
+  const _PlaybackRateEditor({
+    required this.controlKey,
+    required this.label,
+    required this.percent,
+    required this.onCommitted,
+  });
+
+  final String controlKey;
+  final String label;
+  final int percent;
+  final ValueChanged<int> onCommitted;
+
+  @override
+  State<_PlaybackRateEditor> createState() => _PlaybackRateEditorState();
+}
+
+class _PlaybackRateEditorState extends State<_PlaybackRateEditor> {
+  static const _presets = <int>[50, 75, 100, 125, 150, 200];
+  late int _draftPercent;
+
+  @override
+  void initState() {
+    super.initState();
+    _draftPercent = widget.percent;
+  }
+
+  @override
+  void didUpdateWidget(_PlaybackRateEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.percent != widget.percent) {
+      _draftPercent = widget.percent;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.label,
+                style: TextStyle(color: MfPalette.muted, fontSize: 11),
+              ),
+            ),
+            Text(
+              _playbackRateLabel(_draftPercent),
+              key: Key('${widget.controlKey}-value'),
+              style: TextStyle(
+                color: MfPalette.foreground,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: MfSpacing.xs),
+        ShadSlider(
+          key: Key('${widget.controlKey}-slider-${widget.percent}'),
+          initialValue: widget.percent.toDouble(),
+          min: ConversionPlaybackRate.minPercent.toDouble(),
+          max: ConversionPlaybackRate.maxPercent.toDouble(),
+          divisions:
+              (ConversionPlaybackRate.maxPercent -
+                  ConversionPlaybackRate.minPercent) ~/
+              ConversionPlaybackRate.stepPercent,
+          label: _playbackRateLabel(_draftPercent),
+          semanticFormatterCallback: (double value) =>
+              '${widget.label} ${_playbackRateLabel(_ratePercent(value))}',
+          onChanged: (double value) {
+            setState(() => _draftPercent = _ratePercent(value));
+          },
+          onChangeEnd: (double value) {
+            final percent = _ratePercent(value);
+            setState(() => _draftPercent = percent);
+            widget.onCommitted(percent);
+          },
+        ),
+        const SizedBox(height: MfSpacing.sm),
+        Wrap(
+          spacing: MfSpacing.xxs,
+          runSpacing: MfSpacing.xxs,
+          children: [
+            for (final preset in _presets)
+              SizedBox(
+                width: 92,
+                child: ShadButton.outline(
+                  key: Key('${widget.controlKey}-preset-$preset'),
+                  height: 28,
+                  padding: EdgeInsets.zero,
+                  onPressed: () {
+                    setState(() => _draftPercent = preset);
+                    widget.onCommitted(preset);
+                  },
+                  child: Text(_playbackRateLabel(preset)),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static int _ratePercent(double value) =>
+      ((value / ConversionPlaybackRate.stepPercent).round() *
+              ConversionPlaybackRate.stepPercent)
+          .clamp(
+            ConversionPlaybackRate.minPercent,
+            ConversionPlaybackRate.maxPercent,
+          );
+}
+
+String _playbackSpeedSummary(
+  ConversionController conversion,
+  MfStrings strings,
+) => switch (conversion.mode) {
+  MediaOutputMode.videoWithAudio when conversion.playbackRatesLinked =>
+    '${_playbackRateLabel(conversion.videoPlaybackRatePercent)} · ${strings.synchronizedSpeed}',
+  MediaOutputMode.videoWithAudio =>
+    'Video ${_playbackRateLabel(conversion.videoPlaybackRatePercent)} · Audio ${_playbackRateLabel(conversion.audioPlaybackRatePercent)}',
+  MediaOutputMode.videoOnly =>
+    'Video ${_playbackRateLabel(conversion.videoPlaybackRatePercent)}',
+  MediaOutputMode.audioOnly =>
+    'Audio ${_playbackRateLabel(conversion.audioPlaybackRatePercent)}',
+};
+
+String _playbackRateLabel(int percent) {
+  final multiplier = percent / 100;
+  final decimals = percent % 100 == 0 ? 0 : (percent % 10 == 0 ? 1 : 2);
+  return '${multiplier.toStringAsFixed(decimals)}×';
+}
+
 class _DestinationEditor extends StatefulWidget {
   const _DestinationEditor({required this.conversion});
 
@@ -2210,6 +2571,7 @@ class _ModePresentation {
     MediaOutputMode mode,
     ConversionVideoQuality videoQuality,
     ConversionAudioQuality audioQuality,
+    int audioPlaybackRatePercent,
     int selectedDurationMs,
     MfStrings strings,
   ) {
@@ -2230,7 +2592,11 @@ class _ModePresentation {
         container: 'MP3',
         video: strings.none,
         audio: 'MP3 · ${_audioQualityBitrate(audioQuality)}',
-        estimatedSize: _estimatedMp3Size(audioQuality, selectedDurationMs),
+        estimatedSize: _estimatedMp3Size(
+          audioQuality,
+          selectedDurationMs,
+          audioPlaybackRatePercent,
+        ),
       ),
     };
   }
@@ -2299,13 +2665,15 @@ String _videoQualityLabel(ConversionVideoQuality quality, MfStrings strings) =>
 String _estimatedMp3Size(
   ConversionAudioQuality quality,
   int selectedDurationMs,
+  int playbackRatePercent,
 ) {
   final bitrate = switch (quality) {
     ConversionAudioQuality.high => 256000,
     ConversionAudioQuality.medium => 192000,
     ConversionAudioQuality.low => 128000,
   };
-  final megabytes = selectedDurationMs * bitrate / 8000 / 1000000;
+  final outputDurationMs = selectedDurationMs * 100 / playbackRatePercent;
+  final megabytes = outputDurationMs * bitrate / 8000 / 1000000;
   return '≈ ${megabytes.toStringAsFixed(megabytes < 10 ? 1 : 0)} MB';
 }
 

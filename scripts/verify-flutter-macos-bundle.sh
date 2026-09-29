@@ -10,10 +10,10 @@ readonly EXECUTABLE="${APP_DIR}/Contents/MacOS/MediaForge"
 readonly FRAMEWORKS_DIR="${APP_DIR}/Contents/Frameworks"
 readonly RESOURCES_DIR="${APP_DIR}/Contents/Resources"
 readonly LICENSES_DIR="${RESOURCES_DIR}/licenses"
-readonly DMG_PATH="${BUNDLE_DIR}/dmg/MediaForge_0.2.0_aarch64.dmg"
+readonly DMG_PATH="${BUNDLE_DIR}/dmg/MediaForge_0.2.1_aarch64.dmg"
 
 if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
-  echo "MediaForge 0.2.0 Flutter verification requires Apple Silicon macOS." >&2
+  echo "MediaForge 0.2.1 Flutter verification requires Apple Silicon macOS." >&2
   exit 1
 fi
 for tool in codesign file find grep hdiutil lipo otool plutil; do
@@ -90,7 +90,7 @@ done
 if [[ "$(plutil -extract CFBundleIdentifier raw "${APP_DIR}/Contents/Info.plist")" != \
   "app.mediaforge.desktop" ]] || \
   [[ "$(plutil -extract CFBundleShortVersionString raw "${APP_DIR}/Contents/Info.plist")" != \
-  "0.2.0" ]] || \
+  "0.2.1" ]] || \
   [[ "$(plutil -extract CFBundleVersion raw "${APP_DIR}/Contents/Info.plist")" != "1" ]] || \
   [[ "$(plutil -extract LSMinimumSystemVersion raw "${APP_DIR}/Contents/Info.plist")" != \
   "13.0" ]]; then

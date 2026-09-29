@@ -41,7 +41,7 @@ void main() {
     );
     expect(handshake.clientName, 'MediaForge Flutter');
     expect(handshake.protocolVersion, 1);
-    expect(handshake.bridgeVersion, '0.2.0');
+    expect(handshake.bridgeVersion, '0.2.1');
 
     await expectLater(
       negotiateBridge(

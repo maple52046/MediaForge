@@ -25,6 +25,30 @@ enum ConversionVideoQuality {
   high,
 }
 
+/// Playback-rate values shared by conversion and preview presentation state.
+abstract final class ConversionPlaybackRate {
+  /// Slowest supported rate as an integer percentage.
+  static const int minPercent = 25;
+
+  /// Fastest supported rate as an integer percentage.
+  static const int maxPercent = 400;
+
+  /// Supported slider and request increment.
+  static const int stepPercent = 5;
+
+  /// Normal playback speed.
+  static const int normalPercent = 100;
+
+  /// Returns whether [percent] is representable by the stable request contract.
+  static bool isSupported(int percent) =>
+      percent >= minPercent &&
+      percent <= maxPercent &&
+      percent % stepPercent == 0;
+
+  /// Converts an integer percentage to the media player's multiplier.
+  static double multiplier(int percent) => percent / 100;
+}
+
 /// Stable lifecycle values returned with a started conversion.
 enum ConversionJobState {
   /// No conversion has started.
@@ -81,6 +105,9 @@ enum ConversionErrorCode {
   /// The selected trim violates source bounds.
   invalidTrimRange,
 
+  /// A playback rate violates supported bounds or increments.
+  invalidPlaybackRate,
+
   /// The destination exists without overwrite approval.
   outputExists,
 
@@ -112,6 +139,8 @@ class ConversionRequest {
     required this.mode,
     required this.videoQuality,
     required this.audioQuality,
+    required this.videoPlaybackRatePercent,
+    required this.audioPlaybackRatePercent,
     required this.startMs,
     required this.endMs,
     required this.overwrite,
@@ -131,6 +160,12 @@ class ConversionRequest {
 
   /// MP3 quality used when [mode] is [MediaOutputMode.audioOnly].
   final ConversionAudioQuality audioQuality;
+
+  /// Playback rate for output video as an integer percentage.
+  final int videoPlaybackRatePercent;
+
+  /// Playback rate for output audio as an integer percentage.
+  final int audioPlaybackRatePercent;
 
   /// Inclusive trim start in integer milliseconds.
   final int startMs;
@@ -260,6 +295,8 @@ class RustConversionService implements ConversionService {
           mode: _toBridgeMode(request.mode),
           videoQuality: _toBridgeVideoQuality(request.videoQuality),
           audioQuality: _toBridgeQuality(request.audioQuality),
+          videoPlaybackRatePercent: request.videoPlaybackRatePercent,
+          audioPlaybackRatePercent: request.audioPlaybackRatePercent,
           startMs: request.startMs,
           endMs: request.endMs,
           overwrite: request.overwrite,
@@ -352,6 +389,8 @@ ConversionFailure _mapBridgeFailure(bridge.MediaBridgeError error) {
         ConversionErrorCode.encoderUnavailable,
       bridge.MediaBridgeErrorCode.invalidTrimRange =>
         ConversionErrorCode.invalidTrimRange,
+      bridge.MediaBridgeErrorCode.invalidPlaybackRate =>
+        ConversionErrorCode.invalidPlaybackRate,
       bridge.MediaBridgeErrorCode.outputExists =>
         ConversionErrorCode.outputExists,
       bridge.MediaBridgeErrorCode.outputCreateFailed =>

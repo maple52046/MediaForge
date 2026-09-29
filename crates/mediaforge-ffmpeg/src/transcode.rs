@@ -9,8 +9,8 @@ use ffmpeg::{
 };
 use ffmpeg_next as ffmpeg;
 use mediaforge_core::{
-    Cancellation, MediaError, OutputMode, ProgressObserver, ProgressUpdate, TranscodeRequest,
-    TrimRange, VideoQuality,
+    Cancellation, MediaError, OutputMode, PlaybackRate, ProgressObserver, ProgressUpdate,
+    TranscodeRequest, TrimRange, VideoQuality,
 };
 
 static TEMPORARY_OUTPUT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -79,6 +79,7 @@ fn transcode_to(
             &mut output,
             request.trim,
             request.video_quality,
+            request.video_playback_rate,
         )?)
     } else {
         None
@@ -99,6 +100,7 @@ fn transcode_to(
             request.mode,
             request.audio_quality.bitrate(),
             request.trim,
+            request.audio_playback_rate,
         )?)
     } else {
         None
@@ -283,6 +285,7 @@ impl VideoTranscoder {
         output: &mut format::context::Output,
         trim: TrimRange,
         quality: VideoQuality,
+        playback_rate: PlaybackRate,
     ) -> Result<Self, MediaError> {
         let mut decoder = codec::context::Context::from_parameters(input.parameters())
             .and_then(|context| context.decoder().video())
@@ -290,7 +293,9 @@ impl VideoTranscoder {
         decoder.set_time_base(input.time_base());
         let codec = encoder::find_by_name("h264_videotoolbox")
             .ok_or_else(|| MediaError::EncoderUnavailable("h264_videotoolbox".to_owned()))?;
-        let frame_rate = valid_frame_rate(input.avg_frame_rate());
+        let source_frame_rate = valid_frame_rate(input.avg_frame_rate());
+        // Domain Mapping: scaled cadence changes PTS spacing while every decoded frame is encoded.
+        let frame_rate = scaled_frame_rate(source_frame_rate, playback_rate)?;
         let encoder_time_base = frame_rate.invert();
         let global_header = output
             .format()
@@ -464,6 +469,7 @@ impl AudioTranscoder {
         mode: OutputMode,
         mp3_bitrate: usize,
         trim: TrimRange,
+        playback_rate: PlaybackRate,
     ) -> Result<Self, MediaError> {
         let mut decoder = codec::context::Context::from_parameters(input.parameters())
             .and_then(|context| context.decoder().audio())
@@ -480,9 +486,6 @@ impl AudioTranscoder {
         };
         let codec = encoder::find_by_name(encoder_name)
             .ok_or_else(|| MediaError::EncoderUnavailable(encoder_name.to_owned()))?;
-        let audio_codec = codec
-            .audio()
-            .map_err(|error| MediaError::EncoderUnavailable(error.to_string()))?;
         let global_header = output
             .format()
             .flags()
@@ -501,14 +504,9 @@ impl AudioTranscoder {
         } else {
             ffmpeg::ChannelLayout::STEREO
         };
-        let sample_format = audio_codec
-            .formats()
-            .and_then(|mut formats| formats.next())
-            .ok_or_else(|| {
-                MediaError::EncoderUnavailable(format!(
-                    "{encoder_name} did not report a supported sample format"
-                ))
-            })?;
+        // Constraint: bundled AAC and LAME both accept planar f32; direct selection avoids an
+        // FFmpeg codec-format iterator whose pointer alignment is not stable in the app process.
+        let sample_format = ffmpeg::format::Sample::F32(ffmpeg::format::sample::Type::Planar);
         let encoder_rate = i32::try_from(rate)
             .map_err(|error| MediaError::EncoderUnavailable(error.to_string()))?;
         audio_encoder.set_rate(encoder_rate);
@@ -529,7 +527,7 @@ impl AudioTranscoder {
             .map_err(|error| MediaError::EncoderUnavailable(error.to_string()))?;
         output_stream.set_time_base(encoder_time_base);
         output_stream.set_parameters(&audio_encoder);
-        let filter = create_audio_filter(&decoder, &audio_encoder, trim)?;
+        let filter = create_audio_filter(&decoder, &audio_encoder, trim, playback_rate)?;
 
         Ok(Self {
             stream_index: input.index(),
@@ -657,6 +655,7 @@ fn create_audio_filter(
     decoder: &codec::decoder::Audio,
     encoder: &codec::encoder::audio::Encoder,
     trim: TrimRange,
+    playback_rate: PlaybackRate,
 ) -> Result<filter::Graph, MediaError> {
     let mut graph = filter::Graph::new();
     let input_layout = if decoder.channel_layout().is_empty() {
@@ -693,8 +692,9 @@ fn create_audio_filter(
             "",
         )
         .map_err(|error| MediaError::DecodeFailed(error.to_string()))?;
+    let tempo = audio_tempo_filter(playback_rate);
     let spec = format!(
-        "atrim=start={:.3}:end={:.3},asetpts=PTS-STARTPTS,aresample={},aformat=sample_fmts={}:sample_rates={}:channel_layouts=0x{:x}",
+        "atrim=start={:.3}:end={:.3},asetpts=PTS-STARTPTS,{tempo},aresample={},aformat=sample_fmts={}:sample_rates={}:channel_layouts=0x{:x}",
         milliseconds_to_seconds(trim.start_ms()),
         milliseconds_to_seconds(trim.end_ms()),
         encoder.rate(),
@@ -724,6 +724,46 @@ fn valid_frame_rate(candidate: Rational) -> Rational {
     } else {
         Rational(30, 1)
     }
+}
+
+fn scaled_frame_rate(
+    source_frame_rate: Rational,
+    playback_rate: PlaybackRate,
+) -> Result<Rational, MediaError> {
+    let numerator = i64::from(source_frame_rate.numerator())
+        .checked_mul(i64::from(playback_rate.percent()))
+        .and_then(|value| i32::try_from(value).ok())
+        .ok_or_else(|| MediaError::Unexpected("scaled video frame rate overflowed".to_owned()))?;
+    let denominator = i64::from(source_frame_rate.denominator())
+        .checked_mul(100)
+        .and_then(|value| i32::try_from(value).ok())
+        .ok_or_else(|| MediaError::Unexpected("scaled video frame rate overflowed".to_owned()))?;
+    if numerator <= 0 || denominator <= 0 {
+        return Err(MediaError::Unexpected(
+            "scaled video frame rate must remain positive".to_owned(),
+        ));
+    }
+    Ok(Rational(numerator, denominator))
+}
+
+fn audio_tempo_filter(playback_rate: PlaybackRate) -> String {
+    let mut remaining = playback_rate.multiplier();
+    let mut factors = Vec::new();
+    // Constraint: each FFmpeg `atempo` stage must stay within 0.5 through 2.0.
+    while remaining < 0.5 {
+        factors.push(0.5);
+        remaining /= 0.5;
+    }
+    while remaining > 2.0 {
+        factors.push(2.0);
+        remaining /= 2.0;
+    }
+    factors.push(remaining);
+    factors
+        .into_iter()
+        .map(|factor| format!("atempo={factor:.6}"))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 fn videotoolbox_quality(quality: VideoQuality) -> i32 {
@@ -907,6 +947,23 @@ mod tests {
         let frame_rate = valid_frame_rate(Rational(0, 0));
         assert_eq!(frame_rate.numerator(), 30);
         assert_eq!(frame_rate.denominator(), 1);
+    }
+
+    #[test]
+    fn playback_rate_scales_video_frame_rate_without_dropping_frames() {
+        let rate = PlaybackRate::new(125).unwrap_or_else(|error| panic!("{error}"));
+        let frame_rate =
+            scaled_frame_rate(Rational(30, 1), rate).unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(frame_rate.numerator(), 3_750);
+        assert_eq!(frame_rate.denominator(), 100);
+    }
+
+    #[test]
+    fn audio_tempo_chain_keeps_each_factor_in_ffmpeg_safe_bounds() {
+        let slow = PlaybackRate::new(25).unwrap_or_else(|error| panic!("{error}"));
+        let fast = PlaybackRate::new(400).unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(audio_tempo_filter(slow), "atempo=0.500000,atempo=0.500000");
+        assert_eq!(audio_tempo_filter(fast), "atempo=2.000000,atempo=2.000000");
     }
 
     #[test]

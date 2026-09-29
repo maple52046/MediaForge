@@ -91,6 +91,9 @@ class ConversionController extends ChangeNotifier {
   MediaOutputMode _mode = MediaOutputMode.videoWithAudio;
   ConversionVideoQuality _videoQuality = ConversionVideoQuality.balanced;
   ConversionAudioQuality _audioQuality = ConversionAudioQuality.medium;
+  bool _playbackRatesLinked = true;
+  int _videoPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
+  int _audioPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
   bool _converting;
   double _progress;
   ConversionJobState _jobState;
@@ -124,6 +127,28 @@ class ConversionController extends ChangeNotifier {
 
   /// Selected MP3 quality retained while other output modes are active.
   ConversionAudioQuality get audioQuality => _audioQuality;
+
+  /// Whether video and audio rate controls change together.
+  bool get playbackRatesLinked => _playbackRatesLinked;
+
+  /// Selected video playback rate as an integer percentage.
+  int get videoPlaybackRatePercent => _videoPlaybackRatePercent;
+
+  /// Selected audio playback rate as an integer percentage.
+  int get audioPlaybackRatePercent => _audioPlaybackRatePercent;
+
+  /// Rate applied by the single-clock native preview player.
+  int get previewPlaybackRatePercent => switch (_mode) {
+    MediaOutputMode.videoWithAudio ||
+    MediaOutputMode.videoOnly => _videoPlaybackRatePercent,
+    MediaOutputMode.audioOnly => _audioPlaybackRatePercent,
+  };
+
+  /// Whether preview cannot reproduce the selected independent audio rate.
+  bool get showIndependentPreviewWarning =>
+      _mode == MediaOutputMode.videoWithAudio &&
+      !_playbackRatesLinked &&
+      _videoPlaybackRatePercent != _audioPlaybackRatePercent;
 
   /// Ordered recipes enabled for the current shell and source.
   List<MediaOutputMode> get availableModes => _availableModes;
@@ -197,6 +222,9 @@ class ConversionController extends ChangeNotifier {
     _totalMs = 0;
     _framesPerSecond = null;
     _speed = null;
+    _playbackRatesLinked = true;
+    _videoPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
+    _audioPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
     _completedOutputPath = null;
     _failure = null;
     _pendingOverwriteRequest = null;
@@ -273,6 +301,54 @@ class ConversionController extends ChangeNotifier {
       return;
     }
     _videoQuality = quality;
+    _completedOutputPath = null;
+    _failure = null;
+    _notifyListeners();
+  }
+
+  /// Switches between shared and independent video and audio playback rates.
+  void setPlaybackRatesLinked(bool linked) {
+    if (_converting || _playbackRatesLinked == linked) {
+      return;
+    }
+    _playbackRatesLinked = linked;
+    if (linked) {
+      _audioPlaybackRatePercent = _videoPlaybackRatePercent;
+    }
+    _completedOutputPath = null;
+    _failure = null;
+    _notifyListeners();
+  }
+
+  /// Selects a video rate and updates audio while rates are linked.
+  void selectVideoPlaybackRate(int percent) {
+    _validatePlaybackRate(percent);
+    if (_converting ||
+        _videoPlaybackRatePercent == percent &&
+            (!_playbackRatesLinked || _audioPlaybackRatePercent == percent)) {
+      return;
+    }
+    _videoPlaybackRatePercent = percent;
+    if (_playbackRatesLinked) {
+      _audioPlaybackRatePercent = percent;
+    }
+    _completedOutputPath = null;
+    _failure = null;
+    _notifyListeners();
+  }
+
+  /// Selects an audio rate and updates video while rates are linked.
+  void selectAudioPlaybackRate(int percent) {
+    _validatePlaybackRate(percent);
+    if (_converting ||
+        _audioPlaybackRatePercent == percent &&
+            (!_playbackRatesLinked || _videoPlaybackRatePercent == percent)) {
+      return;
+    }
+    _audioPlaybackRatePercent = percent;
+    if (_playbackRatesLinked) {
+      _videoPlaybackRatePercent = percent;
+    }
     _completedOutputPath = null;
     _failure = null;
     _notifyListeners();
@@ -393,6 +469,8 @@ class ConversionController extends ChangeNotifier {
         mode: _mode,
         videoQuality: _videoQuality,
         audioQuality: _audioQuality,
+        videoPlaybackRatePercent: _videoPlaybackRatePercent,
+        audioPlaybackRatePercent: _audioPlaybackRatePercent,
         startMs: startMs,
         endMs: endMs,
         overwrite: false,
@@ -414,6 +492,8 @@ class ConversionController extends ChangeNotifier {
         mode: request.mode,
         videoQuality: request.videoQuality,
         audioQuality: request.audioQuality,
+        videoPlaybackRatePercent: request.videoPlaybackRatePercent,
+        audioPlaybackRatePercent: request.audioPlaybackRatePercent,
         startMs: request.startMs,
         endMs: request.endMs,
         overwrite: true,
@@ -471,6 +551,16 @@ class ConversionController extends ChangeNotifier {
           code: ConversionErrorCode.unexpected,
           diagnostic: error.toString(),
         ),
+      );
+    }
+  }
+
+  static void _validatePlaybackRate(int percent) {
+    if (!ConversionPlaybackRate.isSupported(percent)) {
+      throw ArgumentError.value(
+        percent,
+        'percent',
+        'must be between 25 and 400 in five-percent increments',
       );
     }
   }

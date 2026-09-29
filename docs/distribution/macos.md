@@ -1,6 +1,6 @@
 # macOS distribution
 
-## Unsigned v0.2.0 artifacts
+## Unsigned v0.2.1 artifacts
 
 `bash scripts/bundle-flutter-macos.sh` builds LGPL conversion dependencies from
 the pinned FFmpeg submodule and checksummed LAME source, creates the Flutter

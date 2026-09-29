@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'mediaforge_flutter_bridge'
-  s.version          = '0.2.0'
+  s.version          = '0.2.1'
   s.summary          = 'Native Rust bridge for MediaForge.'
   s.description      = <<-DESC
 Builds and links the MediaForge Rust bridge through Cargokit.

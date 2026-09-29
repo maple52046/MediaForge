@@ -1,6 +1,6 @@
 # MediaForge Flutter application
 
-This directory contains the MediaForge 0.2.0 desktop presentation. Flutter owns
+This directory contains the MediaForge 0.2.1 desktop presentation. Flutter owns
 native preview and interaction; the generated flutter_rust_bridge boundary
 connects probing and conversion to the framework-independent Rust application
 and repository FFmpeg adapter.
@@ -15,5 +15,5 @@ flutter run -d macos
 ```
 
 Use the in-app picker or Finder drag-and-drop to load a local media file.
-Windows and Linux runners are portability scaffolds only and are not 0.2.0
+Windows and Linux runners are portability scaffolds only and are not 0.2.1
 release targets.

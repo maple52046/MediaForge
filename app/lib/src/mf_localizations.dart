@@ -181,6 +181,26 @@ class MfStrings {
   /// Audio-only mode label.
   String get audioOnly => _zh ? '音訊' : 'Audio';
 
+  /// Playback-speed setting label.
+  String get playbackSpeed => _zh ? '播放速度' : 'Playback speed';
+
+  /// Shared video-and-audio speed mode.
+  String get synchronizedSpeed => _zh ? '同步' : 'Synchronized';
+
+  /// Independent video-and-audio speed mode.
+  String get independentSpeed => _zh ? '分開' : 'Independent';
+
+  /// Video playback-speed control label.
+  String get videoSpeed => _zh ? 'Video 速度' : 'Video speed';
+
+  /// Audio playback-speed control label.
+  String get audioSpeed => _zh ? 'Audio 速度' : 'Audio speed';
+
+  /// Preview limitation shown for independently retimed output streams.
+  String get independentSpeedPreviewWarning => _zh
+      ? '預覽僅使用 Video 速度；Audio 的獨立速度會在匯出結果中套用。'
+      : 'Preview uses the Video speed only. The independent Audio speed is applied to the exported file.';
+
   /// High MP3 quality label.
   String get high => _zh ? '高' : 'High';
 
@@ -370,6 +390,8 @@ class MfStrings {
       _zh ? '需要的編碼器不可用' : 'A required encoder is unavailable',
     ConversionErrorCode.invalidTrimRange =>
       _zh ? '裁切範圍無效' : 'The trim range is invalid',
+    ConversionErrorCode.invalidPlaybackRate =>
+      _zh ? '播放速度無效' : 'The playback speed is invalid',
     ConversionErrorCode.outputExists =>
       _zh ? '目的檔已存在' : 'The destination already exists',
     ConversionErrorCode.outputCreateFailed =>

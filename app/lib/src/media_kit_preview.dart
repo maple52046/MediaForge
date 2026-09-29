@@ -41,6 +41,9 @@ abstract interface class PreviewPlaybackDriver {
   /// Sets volume from zero through one hundred.
   Future<void> setVolume(int volumePercent);
 
+  /// Sets the native player's playback-rate multiplier.
+  Future<void> setPlaybackRate(double rate);
+
   /// Releases native player resources.
   Future<void> close();
 }
@@ -98,6 +101,7 @@ class MediaKitPreviewController extends PreviewController {
   int _positionMs = 0;
   int _durationMs = 0;
   int _volumePercent = 78;
+  double _playbackRate = 1;
   String? _diagnostic;
   int? _selectionEndMs;
   bool _selectionStopRequested = false;
@@ -123,6 +127,9 @@ class MediaKitPreviewController extends PreviewController {
 
   @override
   int get volumePercent => _volumePercent;
+
+  @override
+  double get playbackRate => _playbackRate;
 
   @override
   void togglePlayback() {
@@ -188,6 +195,20 @@ class MediaKitPreviewController extends PreviewController {
     _schedule(() => _driver.setVolume(volumePercent.clamp(0, 100)));
   }
 
+  @override
+  void setPlaybackRate(double rate) {
+    if (!rate.isFinite || rate < 0.25 || rate > 4) {
+      throw ArgumentError.value(rate, 'rate', 'must be between 0.25 and 4.0');
+    }
+    if (_availability == PreviewAvailability.unavailable ||
+        _playbackRate == rate) {
+      return;
+    }
+    _playbackRate = rate;
+    notifyListeners();
+    _schedule(() => _driver.setPlaybackRate(rate));
+  }
+
   /// Cancels stream subscriptions and awaits native player disposal once.
   Future<void> close() => _closeFuture ??= _close();
 
@@ -195,6 +216,7 @@ class MediaKitPreviewController extends PreviewController {
     try {
       await _driver.setVolume(_volumePercent);
       await _driver.open(_normalizePreviewSource(source));
+      await _driver.setPlaybackRate(_playbackRate);
       if (!_closed && _availability != PreviewAvailability.unavailable) {
         _availability = PreviewAvailability.ready;
         notifyListeners();
@@ -402,6 +424,9 @@ class _MediaKitPlaybackDriver implements PreviewPlaybackDriver {
   @override
   Future<void> setVolume(int volumePercent) =>
       _player.setVolume(volumePercent.toDouble());
+
+  @override
+  Future<void> setPlaybackRate(double rate) => _player.setRate(rate);
 }
 
 String _normalizePreviewSource(String source) {

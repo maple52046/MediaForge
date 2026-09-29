@@ -663,13 +663,14 @@ impl SseDecode for crate::api::media::MediaBridgeErrorCode {
             2 => crate::api::media::MediaBridgeErrorCode::DecodeFailed,
             3 => crate::api::media::MediaBridgeErrorCode::EncoderUnavailable,
             4 => crate::api::media::MediaBridgeErrorCode::InvalidTrimRange,
-            5 => crate::api::media::MediaBridgeErrorCode::OutputExists,
-            6 => crate::api::media::MediaBridgeErrorCode::OutputCreateFailed,
-            7 => crate::api::media::MediaBridgeErrorCode::DiskWriteFailed,
-            8 => crate::api::media::MediaBridgeErrorCode::JobActive,
-            9 => crate::api::media::MediaBridgeErrorCode::JobNotFound,
-            10 => crate::api::media::MediaBridgeErrorCode::Cancelled,
-            11 => crate::api::media::MediaBridgeErrorCode::Unexpected,
+            5 => crate::api::media::MediaBridgeErrorCode::InvalidPlaybackRate,
+            6 => crate::api::media::MediaBridgeErrorCode::OutputExists,
+            7 => crate::api::media::MediaBridgeErrorCode::OutputCreateFailed,
+            8 => crate::api::media::MediaBridgeErrorCode::DiskWriteFailed,
+            9 => crate::api::media::MediaBridgeErrorCode::JobActive,
+            10 => crate::api::media::MediaBridgeErrorCode::JobNotFound,
+            11 => crate::api::media::MediaBridgeErrorCode::Cancelled,
+            12 => crate::api::media::MediaBridgeErrorCode::Unexpected,
             _ => unreachable!("Invalid variant for MediaBridgeErrorCode: {}", inner),
         };
     }
@@ -830,6 +831,8 @@ impl SseDecode for crate::api::media::StartTranscodeRequestDto {
         let mut var_mode = <crate::api::media::MediaOutputMode>::sse_decode(deserializer);
         let mut var_videoQuality = <crate::api::media::MediaVideoQuality>::sse_decode(deserializer);
         let mut var_audioQuality = <crate::api::media::MediaAudioQuality>::sse_decode(deserializer);
+        let mut var_videoPlaybackRatePercent = <u16>::sse_decode(deserializer);
+        let mut var_audioPlaybackRatePercent = <u16>::sse_decode(deserializer);
         let mut var_startMs = <u64>::sse_decode(deserializer);
         let mut var_endMs = <u64>::sse_decode(deserializer);
         let mut var_overwrite = <bool>::sse_decode(deserializer);
@@ -839,6 +842,8 @@ impl SseDecode for crate::api::media::StartTranscodeRequestDto {
             mode: var_mode,
             video_quality: var_videoQuality,
             audio_quality: var_audioQuality,
+            video_playback_rate_percent: var_videoPlaybackRatePercent,
+            audio_playback_rate_percent: var_audioPlaybackRatePercent,
             start_ms: var_startMs,
             end_ms: var_endMs,
             overwrite: var_overwrite,
@@ -1267,13 +1272,14 @@ impl flutter_rust_bridge::IntoDart for crate::api::media::MediaBridgeErrorCode {
             Self::DecodeFailed => 2.into_dart(),
             Self::EncoderUnavailable => 3.into_dart(),
             Self::InvalidTrimRange => 4.into_dart(),
-            Self::OutputExists => 5.into_dart(),
-            Self::OutputCreateFailed => 6.into_dart(),
-            Self::DiskWriteFailed => 7.into_dart(),
-            Self::JobActive => 8.into_dart(),
-            Self::JobNotFound => 9.into_dart(),
-            Self::Cancelled => 10.into_dart(),
-            Self::Unexpected => 11.into_dart(),
+            Self::InvalidPlaybackRate => 5.into_dart(),
+            Self::OutputExists => 6.into_dart(),
+            Self::OutputCreateFailed => 7.into_dart(),
+            Self::DiskWriteFailed => 8.into_dart(),
+            Self::JobActive => 9.into_dart(),
+            Self::JobNotFound => 10.into_dart(),
+            Self::Cancelled => 11.into_dart(),
+            Self::Unexpected => 12.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -1369,6 +1375,12 @@ impl flutter_rust_bridge::IntoDart for crate::api::media::StartTranscodeRequestD
             self.mode.into_into_dart().into_dart(),
             self.video_quality.into_into_dart().into_dart(),
             self.audio_quality.into_into_dart().into_dart(),
+            self.video_playback_rate_percent
+                .into_into_dart()
+                .into_dart(),
+            self.audio_playback_rate_percent
+                .into_into_dart()
+                .into_dart(),
             self.start_ms.into_into_dart().into_dart(),
             self.end_ms.into_into_dart().into_dart(),
             self.overwrite.into_into_dart().into_dart(),
@@ -1675,13 +1687,14 @@ impl SseEncode for crate::api::media::MediaBridgeErrorCode {
                 crate::api::media::MediaBridgeErrorCode::DecodeFailed => 2,
                 crate::api::media::MediaBridgeErrorCode::EncoderUnavailable => 3,
                 crate::api::media::MediaBridgeErrorCode::InvalidTrimRange => 4,
-                crate::api::media::MediaBridgeErrorCode::OutputExists => 5,
-                crate::api::media::MediaBridgeErrorCode::OutputCreateFailed => 6,
-                crate::api::media::MediaBridgeErrorCode::DiskWriteFailed => 7,
-                crate::api::media::MediaBridgeErrorCode::JobActive => 8,
-                crate::api::media::MediaBridgeErrorCode::JobNotFound => 9,
-                crate::api::media::MediaBridgeErrorCode::Cancelled => 10,
-                crate::api::media::MediaBridgeErrorCode::Unexpected => 11,
+                crate::api::media::MediaBridgeErrorCode::InvalidPlaybackRate => 5,
+                crate::api::media::MediaBridgeErrorCode::OutputExists => 6,
+                crate::api::media::MediaBridgeErrorCode::OutputCreateFailed => 7,
+                crate::api::media::MediaBridgeErrorCode::DiskWriteFailed => 8,
+                crate::api::media::MediaBridgeErrorCode::JobActive => 9,
+                crate::api::media::MediaBridgeErrorCode::JobNotFound => 10,
+                crate::api::media::MediaBridgeErrorCode::Cancelled => 11,
+                crate::api::media::MediaBridgeErrorCode::Unexpected => 12,
                 _ => {
                     unimplemented!("");
                 }
@@ -1830,6 +1843,8 @@ impl SseEncode for crate::api::media::StartTranscodeRequestDto {
         <crate::api::media::MediaOutputMode>::sse_encode(self.mode, serializer);
         <crate::api::media::MediaVideoQuality>::sse_encode(self.video_quality, serializer);
         <crate::api::media::MediaAudioQuality>::sse_encode(self.audio_quality, serializer);
+        <u16>::sse_encode(self.video_playback_rate_percent, serializer);
+        <u16>::sse_encode(self.audio_playback_rate_percent, serializer);
         <u64>::sse_encode(self.start_ms, serializer);
         <u64>::sse_encode(self.end_ms, serializer);
         <bool>::sse_encode(self.overwrite, serializer);

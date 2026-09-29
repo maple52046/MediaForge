@@ -113,6 +113,8 @@ MediaProbeFailure _mapError(bridge.MediaBridgeError error) {
         MediaProbeErrorCode.encoderUnavailable,
       bridge.MediaBridgeErrorCode.invalidTrimRange =>
         MediaProbeErrorCode.invalidTrimRange,
+      bridge.MediaBridgeErrorCode.invalidPlaybackRate =>
+        MediaProbeErrorCode.unexpected,
       bridge.MediaBridgeErrorCode.outputExists =>
         MediaProbeErrorCode.outputExists,
       bridge.MediaBridgeErrorCode.outputCreateFailed =>

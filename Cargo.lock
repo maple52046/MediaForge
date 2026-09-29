@@ -556,21 +556,21 @@ dependencies = [
 
 [[package]]
 name = "mediaforge-application"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "mediaforge-core",
 ]
 
 [[package]]
 name = "mediaforge-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "mediaforge-ffmpeg"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "ffmpeg-next",
  "mediaforge-core",
@@ -580,7 +580,7 @@ dependencies = [
 
 [[package]]
 name = "mediaforge-flutter-bridge"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "flutter_rust_bridge",
  "mediaforge-application",

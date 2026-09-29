@@ -13,7 +13,7 @@ readonly FRAMEWORKS_DIR="${APP_DIR}/Contents/Frameworks"
 readonly RESOURCES_DIR="${APP_DIR}/Contents/Resources"
 readonly LICENSES_DIR="${RESOURCES_DIR}/licenses"
 readonly FLUTTER_ASSETS_DIR="${FRAMEWORKS_DIR}/App.framework/Versions/A/Resources/flutter_assets"
-readonly DMG_PATH="${BUNDLE_DIR}/dmg/MediaForge_0.2.0_aarch64.dmg"
+readonly DMG_PATH="${BUNDLE_DIR}/dmg/MediaForge_0.2.1_aarch64.dmg"
 readonly EXPECTED_FLUTTER_VERSION="3.47.0"
 
 FLUTTER="${FLUTTER:-$(command -v flutter || true)}"
@@ -24,7 +24,7 @@ fi
 readonly FLUTTER
 
 if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
-  echo "MediaForge 0.2.0 Flutter packaging requires Apple Silicon macOS." >&2
+  echo "MediaForge 0.2.1 Flutter packaging requires Apple Silicon macOS." >&2
   exit 1
 fi
 for tool in codesign ditto hdiutil install_name_tool otool plutil sed; do
@@ -49,7 +49,7 @@ export MACOSX_DEPLOYMENT_TARGET=13.0
 
 cd "${FLUTTER_PROJECT_DIR}"
 "${FLUTTER}" pub get --enforce-lockfile
-"${FLUTTER}" build macos --release --build-name=0.2.0 --build-number=1
+"${FLUTTER}" build macos --release --build-name=0.2.1 --build-number=1
 
 if [[ ! -d "${SOURCE_APP}" ]]; then
   echo "Flutter did not produce the expected release app: ${SOURCE_APP}" >&2
@@ -91,7 +91,7 @@ codesign --force --deep --sign - --timestamp=none "${APP_DIR}"
 mkdir -p "$(dirname "${DMG_PATH}")"
 rm -f "${DMG_PATH}"
 hdiutil create \
-  -volname "MediaForge 0.2.0" \
+  -volname "MediaForge 0.2.1" \
   -srcfolder "${APP_DIR}" \
   -ov \
   -format UDZO \

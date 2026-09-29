@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mediaforge/src/conversion_controller.dart';
@@ -102,6 +103,69 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('None'), findsOneWidget);
     expect(find.text('Convert video'), findsOneWidget);
+  });
+
+  testWidgets('playback speed controls drive preview and warning state', (
+    WidgetTester tester,
+  ) async {
+    await _setSurfaceSize(tester, supportedSizes.first);
+    final conversion = ConversionController.prototype();
+    final preview = _TrackingPreviewController();
+    await tester.pumpWidget(
+      MediaForgePrototypeApp(
+        state: PrototypeState.loaded,
+        conversionController: conversion,
+        previewController: preview,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('playback-speed-settings')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('playback-speed-popover')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('speed-independent')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('video-speed-preset-150')));
+    await tester.tap(find.byKey(const Key('audio-speed-preset-75')));
+    await tester.pumpAndSettle();
+
+    expect(preview.playbackRate, 1.5);
+    expect(preview.positionMs, 842);
+    expect(preview.seekCommands, isEmpty);
+    expect(
+      find.byKey(const Key('independent-speed-preview-warning')),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Preview uses the Video speed only. The independent Audio speed is applied to the exported file.',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    _expectNoWorkspaceScrollable(tester);
+
+    await tester.tap(find.byKey(const Key('audio-speed-preset-150')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('independent-speed-preview-warning')),
+      findsNothing,
+    );
+
+    conversion.selectMode(MediaOutputMode.audioOnly);
+    conversion.selectAudioPlaybackRate(50);
+    await tester.pumpAndSettle();
+    expect(preview.playbackRate, 0.5);
+    expect(find.text('≈ 0.2 MB'), findsOneWidget);
+    expect(
+      find.byKey(const Key('independent-speed-preview-warning')),
+      findsNothing,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('playback-speed-popover')), findsNothing);
   });
 
   testWidgets('MP3 quality is accessible and fits the minimum viewport', (
@@ -480,6 +544,9 @@ void _expectNoWorkspaceScrollable(WidgetTester tester) {
 
 class _UnavailablePreviewController extends PreviewController {
   @override
+  double get playbackRate => 1;
+
+  @override
   PreviewAvailability get availability => PreviewAvailability.unavailable;
 
   @override
@@ -507,6 +574,9 @@ class _UnavailablePreviewController extends PreviewController {
   void setVolume(int volumePercent) {}
 
   @override
+  void setPlaybackRate(double rate) {}
+
+  @override
   void togglePlayback() {}
 }
 
@@ -515,6 +585,10 @@ class _TrackingPreviewController extends PreviewController {
   bool _playing = false;
   final List<int> seekCommands = <int>[];
   final List<(int, int)> selectionCommands = <(int, int)>[];
+  double _playbackRate = 1;
+
+  @override
+  double get playbackRate => _playbackRate;
 
   @override
   PreviewAvailability get availability => PreviewAvailability.placeholder;
@@ -556,6 +630,12 @@ class _TrackingPreviewController extends PreviewController {
 
   @override
   void setVolume(int volumePercent) {}
+
+  @override
+  void setPlaybackRate(double rate) {
+    _playbackRate = rate;
+    notifyListeners();
+  }
 
   @override
   void togglePlayback() {
