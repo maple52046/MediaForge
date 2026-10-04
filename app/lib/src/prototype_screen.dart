@@ -1087,6 +1087,7 @@ class _TimelinePanel extends StatelessWidget {
               children: [
                 _TimeField(
                   inputKey: const Key('start-time-input'),
+                  labelKey: const Key('start-time-label'),
                   label: strings.start,
                   valueMs: timeline.startMs,
                   onSubmitted: (String value) {
@@ -1100,6 +1101,7 @@ class _TimelinePanel extends StatelessWidget {
                 const SizedBox(width: MfSpacing.xs),
                 _TimeField(
                   inputKey: const Key('end-time-input'),
+                  labelKey: const Key('end-time-label'),
                   label: strings.end,
                   valueMs: timeline.endMs,
                   onSubmitted: (String value) {
@@ -1151,12 +1153,14 @@ class _TimelinePanel extends StatelessWidget {
 class _TimeField extends StatefulWidget {
   const _TimeField({
     required this.inputKey,
+    required this.labelKey,
     required this.label,
     required this.valueMs,
     required this.onSubmitted,
   });
 
   final Key inputKey;
+  final Key labelKey;
   final String label;
   final int valueMs;
   final int? Function(String value) onSubmitted;
@@ -1234,15 +1238,26 @@ class _TimeFieldState extends State<_TimeField> {
         controller: _controller,
         focusNode: _focusNode,
         constraints: const BoxConstraints.tightFor(width: 118, height: 32),
-        padding: EdgeInsets.zero,
-        inputPadding: const EdgeInsets.symmetric(horizontal: MfSpacing.xxs),
+        padding: const EdgeInsets.only(
+          top: MfSpacing.xs,
+          bottom: MfSpacing.xxs,
+        ),
+        inputPadding: EdgeInsets.zero,
         gap: MfSpacing.xxs,
-        leading: Text(
-          widget.label,
-          style: TextStyle(
-            color: MfPalette.faint,
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
+        alignment: Alignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
+        textAlign: TextAlign.center,
+        leading: SizedBox(
+          key: widget.labelKey,
+          width: MfSpacing.xxl,
+          child: Text(
+            widget.label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: MfPalette.faint,
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
         style: TextStyle(
@@ -2022,16 +2037,47 @@ class _OptionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: 26,
-      child: Row(
-        children: [
-          Text(label, style: TextStyle(color: MfPalette.muted, fontSize: 11)),
-          const Spacer(),
-          Text(
-            value,
-            style: TextStyle(color: MfPalette.foreground, fontSize: 11),
+      child: _OptionRowContent(label: label, value: value),
+    );
+  }
+}
+
+class _OptionRowContent extends StatelessWidget {
+  const _OptionRowContent({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.start,
+              style: TextStyle(color: MfPalette.muted, fontSize: 11),
+            ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: MfSpacing.sm),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: TextStyle(color: MfPalette.foreground, fontSize: 11),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2091,27 +2137,9 @@ class _PlaybackSpeedControlState extends State<_PlaybackSpeedControl> {
               : _popoverController.toggle,
           child: SizedBox(
             width: 320,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    strings.playbackSpeed,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: MfPalette.muted, fontSize: 11),
-                  ),
-                ),
-                const SizedBox(width: MfSpacing.sm),
-                Flexible(
-                  child: Text(
-                    summary,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                    style: TextStyle(color: MfPalette.foreground, fontSize: 11),
-                  ),
-                ),
-              ],
+            child: _OptionRowContent(
+              label: strings.playbackSpeed,
+              value: summary,
             ),
           ),
         ),

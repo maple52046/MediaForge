@@ -168,6 +168,53 @@ void main() {
     expect(find.byKey(const Key('playback-speed-popover')), findsNothing);
   });
 
+  testWidgets('trim values and playback speed summary share row alignment', (
+    WidgetTester tester,
+  ) async {
+    await _setSurfaceSize(tester, const Size(1200, 780));
+    await tester.pumpWidget(
+      const MediaForgePrototypeApp(
+        state: PrototypeState.loaded,
+        systemLocales: <Locale>[Locale('zh', 'TW')],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    const fields = <(Key, Key, String)>[
+      (Key('start-time-input'), Key('start-time-label'), '開始'),
+      (Key('end-time-input'), Key('end-time-label'), '結束'),
+    ];
+    for (final (inputKey, labelKey, labelText) in fields) {
+      final input = find.byKey(inputKey);
+      final labelSlot = find.byKey(labelKey);
+      final label = find.descendant(of: input, matching: find.text(labelText));
+      final value = find.descendant(
+        of: input,
+        matching: find.byType(EditableText),
+      );
+      final inputRect = tester.getRect(input);
+      final labelSlotRect = tester.getRect(labelSlot);
+      final labelRect = tester.getRect(label);
+      final valueRect = tester.getRect(value);
+      final contentRect = labelSlotRect.expandToInclude(valueRect);
+
+      expect(contentRect.center.dx, moreOrLessEquals(inputRect.center.dx));
+      expect(labelRect.center.dx, moreOrLessEquals(labelSlotRect.center.dx));
+      expect(labelRect.center.dy, moreOrLessEquals(inputRect.center.dy));
+      expect(valueRect.center.dy, moreOrLessEquals(inputRect.center.dy));
+    }
+
+    final optionLabel = tester.getRect(find.text('容器'));
+    final optionValue = tester.getRect(find.text('MP4'));
+    final speedLabel = tester.getRect(find.text('播放速度'));
+    final speedValue = tester.getRect(find.text('1× · 同步'));
+
+    expect(speedLabel.left, moreOrLessEquals(optionLabel.left));
+    expect(speedValue.right, moreOrLessEquals(optionValue.right));
+    expect(speedLabel.center.dy, moreOrLessEquals(speedValue.center.dy));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('MP3 quality is accessible and fits the minimum viewport', (
     WidgetTester tester,
   ) async {
