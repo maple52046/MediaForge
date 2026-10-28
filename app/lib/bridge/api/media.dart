@@ -355,6 +355,9 @@ enum MediaBridgeErrorCode {
   /// A playback rate violates supported bounds or increments.
   invalidPlaybackRate,
 
+  /// An audio fade duration violates supported bounds or increments.
+  invalidAudioFadeDuration,
+
   /// The destination exists without overwrite approval.
   outputExists,
 
@@ -474,6 +477,8 @@ class StartTranscodeRequestDto {
     required this.audioQuality,
     required this.videoPlaybackRatePercent,
     required this.audioPlaybackRatePercent,
+    required this.audioFadeInMs,
+    required this.audioFadeOutMs,
     required this.startMs,
     required this.endMs,
     required this.overwrite,
@@ -500,6 +505,12 @@ class StartTranscodeRequestDto {
   /// Audio playback rate as a validated integer percentage.
   final int audioPlaybackRatePercent;
 
+  /// Requested fade-in duration in integer milliseconds, or zero when disabled.
+  final int audioFadeInMs;
+
+  /// Requested fade-out duration in integer milliseconds, or zero when disabled.
+  final int audioFadeOutMs;
+
   /// Inclusive trim start in integer milliseconds.
   final int startMs;
 
@@ -518,6 +529,8 @@ class StartTranscodeRequestDto {
       audioQuality.hashCode ^
       videoPlaybackRatePercent.hashCode ^
       audioPlaybackRatePercent.hashCode ^
+      audioFadeInMs.hashCode ^
+      audioFadeOutMs.hashCode ^
       startMs.hashCode ^
       endMs.hashCode ^
       overwrite.hashCode;
@@ -534,6 +547,8 @@ class StartTranscodeRequestDto {
           audioQuality == other.audioQuality &&
           videoPlaybackRatePercent == other.videoPlaybackRatePercent &&
           audioPlaybackRatePercent == other.audioPlaybackRatePercent &&
+          audioFadeInMs == other.audioFadeInMs &&
+          audioFadeOutMs == other.audioFadeOutMs &&
           startMs == other.startMs &&
           endMs == other.endMs &&
           overwrite == other.overwrite;

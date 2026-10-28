@@ -49,6 +49,85 @@ abstract final class ConversionPlaybackRate {
   static double multiplier(int percent) => percent / 100;
 }
 
+/// Audio-fade values shared by conversion and preview presentation state.
+abstract final class ConversionAudioFade {
+  /// Shortest enabled fade duration in milliseconds.
+  static const int minEnabledMs = 100;
+
+  /// Longest requested fade duration in milliseconds.
+  static const int maxMs = 10000;
+
+  /// Supported slider and request increment in milliseconds.
+  static const int stepMs = 100;
+
+  /// Default retained duration when an effect is first enabled.
+  static const int defaultMs = 1000;
+
+  /// Returns whether [durationMs] is representable by the request contract.
+  static bool isSupported(int durationMs) =>
+      durationMs == 0 ||
+      durationMs >= minEnabledMs &&
+          durationMs <= maxMs &&
+          durationMs % stepMs == 0;
+
+  /// Resolves the effective non-overlapping fades for one output selection.
+  static EffectiveAudioFadeDurations resolve({
+    required int selectedDurationMs,
+    required int audioPlaybackRatePercent,
+    required int fadeInMs,
+    required int fadeOutMs,
+  }) {
+    if (selectedDurationMs <= 0 ||
+        !ConversionPlaybackRate.isSupported(audioPlaybackRatePercent) ||
+        !isSupported(fadeInMs) ||
+        !isSupported(fadeOutMs)) {
+      throw ArgumentError('Audio fade inputs must satisfy conversion bounds.');
+    }
+    final outputDurationMs =
+        (selectedDurationMs * 100 + audioPlaybackRatePercent - 1) ~/
+        audioPlaybackRatePercent;
+    final requestedTotalMs = fadeInMs + fadeOutMs;
+    if (requestedTotalMs <= outputDurationMs) {
+      return EffectiveAudioFadeDurations(
+        fadeInMs: fadeInMs,
+        fadeOutMs: fadeOutMs,
+        outputDurationMs: outputDurationMs,
+        wasShortened: false,
+      );
+    }
+    final effectiveFadeInMs = fadeInMs * outputDurationMs ~/ requestedTotalMs;
+    return EffectiveAudioFadeDurations(
+      fadeInMs: effectiveFadeInMs,
+      fadeOutMs: outputDurationMs - effectiveFadeInMs,
+      outputDurationMs: outputDurationMs,
+      wasShortened: true,
+    );
+  }
+}
+
+/// Effective fade durations derived for one retimed audio selection.
+class EffectiveAudioFadeDurations {
+  /// Creates an immutable effective fade result.
+  const EffectiveAudioFadeDurations({
+    required this.fadeInMs,
+    required this.fadeOutMs,
+    required this.outputDurationMs,
+    required this.wasShortened,
+  });
+
+  /// Applied fade-in duration in output milliseconds.
+  final int fadeInMs;
+
+  /// Applied fade-out duration in output milliseconds.
+  final int fadeOutMs;
+
+  /// Retimed audio-selection duration in milliseconds.
+  final int outputDurationMs;
+
+  /// Whether the requested fades were proportionally shortened.
+  final bool wasShortened;
+}
+
 /// Stable lifecycle values returned with a started conversion.
 enum ConversionJobState {
   /// No conversion has started.
@@ -108,6 +187,9 @@ enum ConversionErrorCode {
   /// A playback rate violates supported bounds or increments.
   invalidPlaybackRate,
 
+  /// An audio fade violates supported bounds or increments.
+  invalidAudioFadeDuration,
+
   /// The destination exists without overwrite approval.
   outputExists,
 
@@ -141,6 +223,8 @@ class ConversionRequest {
     required this.audioQuality,
     required this.videoPlaybackRatePercent,
     required this.audioPlaybackRatePercent,
+    required this.audioFadeInMs,
+    required this.audioFadeOutMs,
     required this.startMs,
     required this.endMs,
     required this.overwrite,
@@ -166,6 +250,12 @@ class ConversionRequest {
 
   /// Playback rate for output audio as an integer percentage.
   final int audioPlaybackRatePercent;
+
+  /// Requested fade-in duration in milliseconds, or zero when disabled.
+  final int audioFadeInMs;
+
+  /// Requested fade-out duration in milliseconds, or zero when disabled.
+  final int audioFadeOutMs;
 
   /// Inclusive trim start in integer milliseconds.
   final int startMs;
@@ -297,6 +387,8 @@ class RustConversionService implements ConversionService {
           audioQuality: _toBridgeQuality(request.audioQuality),
           videoPlaybackRatePercent: request.videoPlaybackRatePercent,
           audioPlaybackRatePercent: request.audioPlaybackRatePercent,
+          audioFadeInMs: request.audioFadeInMs,
+          audioFadeOutMs: request.audioFadeOutMs,
           startMs: request.startMs,
           endMs: request.endMs,
           overwrite: request.overwrite,
@@ -391,6 +483,8 @@ ConversionFailure _mapBridgeFailure(bridge.MediaBridgeError error) {
         ConversionErrorCode.invalidTrimRange,
       bridge.MediaBridgeErrorCode.invalidPlaybackRate =>
         ConversionErrorCode.invalidPlaybackRate,
+      bridge.MediaBridgeErrorCode.invalidAudioFadeDuration =>
+        ConversionErrorCode.invalidAudioFadeDuration,
       bridge.MediaBridgeErrorCode.outputExists =>
         ConversionErrorCode.outputExists,
       bridge.MediaBridgeErrorCode.outputCreateFailed =>

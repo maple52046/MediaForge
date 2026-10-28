@@ -21,12 +21,11 @@ void main() {
     driver.durationController.add(2000);
     driver.positionController.add(625);
     driver.playingController.add(true);
-    driver.volumeController.add(64);
     await _drainEvents();
     expect(preview.durationMs, 2000);
     expect(preview.positionMs, 625);
     expect(preview.playing, isTrue);
-    expect(preview.volumePercent, 64);
+    expect(preview.volumePercent, 78);
 
     preview.togglePlayback();
     preview.seek(2500);
@@ -73,6 +72,52 @@ void main() {
     await _drainEvents();
     expect(driver.playCount, 0);
     expect(driver.seekCommands, isEmpty);
+
+    await preview.close();
+    preview.dispose();
+  });
+
+  test('audio fade preview composes with base volume inside trim', () async {
+    final driver = _FakePreviewPlaybackDriver();
+    final preview = MediaKitPreviewController(
+      driver: driver,
+      source: 'asset:///test/fixtures/preview-h264.mp4',
+    );
+    await preview.initialized;
+    preview.setAudioFadeEnvelope(
+      const PreviewAudioFadeEnvelope(
+        startMs: 100,
+        endMs: 1100,
+        fadeInSourceMs: 200,
+        fadeOutSourceMs: 200,
+      ),
+    );
+
+    driver.positionController.add(100);
+    await _drainEvents();
+    expect(driver.volumeCommands.last, 0);
+    driver.positionController.add(200);
+    await _drainEvents();
+    expect(driver.volumeCommands.last, 39);
+    driver.positionController.add(500);
+    await _drainEvents();
+    expect(driver.volumeCommands.last, 78);
+    driver.positionController.add(1000);
+    await _drainEvents();
+    expect(driver.volumeCommands.last, 39);
+
+    preview.setVolume(50);
+    await _drainEvents();
+    expect(preview.volumePercent, 50);
+    expect(driver.volumeCommands.last, 25);
+    driver.positionController.add(1100);
+    await _drainEvents();
+    expect(driver.volumeCommands.last, 50);
+
+    preview.setAudioFadeEnvelope(null);
+    await _drainEvents();
+    expect(preview.positionMs, 1100);
+    expect(driver.volumeCommands.last, 50);
 
     await preview.close();
     preview.dispose();
@@ -165,8 +210,6 @@ class _FakePreviewPlaybackDriver implements PreviewPlaybackDriver {
       StreamController<int>.broadcast();
   final StreamController<int> durationController =
       StreamController<int>.broadcast();
-  final StreamController<int> volumeController =
-      StreamController<int>.broadcast();
   final StreamController<bool> completedController =
       StreamController<bool>.broadcast();
   final StreamController<String> errorController =
@@ -195,16 +238,12 @@ class _FakePreviewPlaybackDriver implements PreviewPlaybackDriver {
   Stream<int> get positionMs => positionController.stream;
 
   @override
-  Stream<int> get volumePercent => volumeController.stream;
-
-  @override
   Future<void> close() async {
     closeCount += 1;
     await Future.wait<void>([
       playingController.close(),
       positionController.close(),
       durationController.close(),
-      volumeController.close(),
       completedController.close(),
       errorController.close(),
     ]);

@@ -8,6 +8,7 @@ import 'conversion_controller.dart';
 import 'conversion_service.dart';
 import 'file_selection.dart';
 import 'media_kit_preview.dart';
+import 'media_metadata.dart';
 import 'media_probe_service.dart';
 import 'media_session_controller.dart';
 import 'mf_localizations.dart';
@@ -190,6 +191,7 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
     unawaited(_settings.load());
     _mediaSession.addListener(_handleMediaSessionChange);
     _preview.addListener(_handlePreviewChange);
+    _timeline.addListener(_handleTimelineChange);
     _conversion.addListener(_handleConversionChange);
     _settings.addListener(_handleSettingsChange);
     _handleConversionChange();
@@ -244,12 +246,18 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
     _preview.addListener(_handlePreviewChange);
     _appliedPreviewRatePercent = null;
     _applyPreviewPlaybackRate();
+    _applyPreviewAudioFade();
     previousPreview.dispose();
   }
 
   void _handleConversionChange() {
     _mediaSession.setSourceChangesAllowed(!_conversion.converting);
     _applyPreviewPlaybackRate();
+    _applyPreviewAudioFade();
+  }
+
+  void _handleTimelineChange() {
+    _applyPreviewAudioFade();
   }
 
   void _applyPreviewPlaybackRate() {
@@ -259,6 +267,38 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
     }
     _appliedPreviewRatePercent = percent;
     _preview.setPlaybackRate(ConversionPlaybackRate.multiplier(percent));
+  }
+
+  void _applyPreviewAudioFade() {
+    if (_conversion.mode == MediaOutputMode.videoOnly ||
+        !_conversion.hasAudioFade ||
+        _timeline.selectedDurationMs <= 0) {
+      _preview.setAudioFadeEnvelope(null);
+      return;
+    }
+    final effective = _conversion.effectiveAudioFadeFor(
+      _timeline.selectedDurationMs,
+    );
+    final fadeInSourceMs =
+        effective.fadeInMs *
+        _timeline.selectedDurationMs ~/
+        effective.outputDurationMs;
+    final requestedFadeOutSourceMs =
+        effective.fadeOutMs *
+        _timeline.selectedDurationMs ~/
+        effective.outputDurationMs;
+    final fadeOutSourceMs =
+        effective.fadeInMs + effective.fadeOutMs == effective.outputDurationMs
+        ? _timeline.selectedDurationMs - fadeInSourceMs
+        : requestedFadeOutSourceMs;
+    _preview.setAudioFadeEnvelope(
+      PreviewAudioFadeEnvelope(
+        startMs: _timeline.startMs,
+        endMs: _timeline.endMs,
+        fadeInSourceMs: fadeInSourceMs,
+        fadeOutSourceMs: fadeOutSourceMs,
+      ),
+    );
   }
 
   void _handleSettingsChange() {
@@ -278,6 +318,7 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
     _preview.addListener(_handlePreviewChange);
     _appliedPreviewRatePercent = null;
     _applyPreviewPlaybackRate();
+    _applyPreviewAudioFade();
     previousPreview.dispose();
   }
 
@@ -289,6 +330,7 @@ class _MediaForgePrototypeAppState extends State<MediaForgePrototypeApp> {
   void dispose() {
     _mediaSession.removeListener(_handleMediaSessionChange);
     _preview.removeListener(_handlePreviewChange);
+    _timeline.removeListener(_handleTimelineChange);
     _conversion.removeListener(_handleConversionChange);
     _settings.removeListener(_handleSettingsChange);
     _settings.dispose();

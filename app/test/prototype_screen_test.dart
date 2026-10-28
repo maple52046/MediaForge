@@ -143,6 +143,14 @@ void main() {
       ),
       findsOneWidget,
     );
+    conversion.setAudioFadeInEnabled(true);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Preview uses the Video speed only. The independent Audio speed and exact fade timing are applied to the exported file.',
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
     _expectNoWorkspaceScrollable(tester);
 
@@ -167,6 +175,60 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('playback-speed-popover')), findsNothing);
   });
+
+  testWidgets(
+    'audio fades configure export and preview with short-clip notice',
+    (WidgetTester tester) async {
+      await _setSurfaceSize(tester, const Size(1200, 780));
+      final conversion = ConversionController.prototype();
+      final preview = _TrackingPreviewController();
+      await tester.pumpWidget(
+        MediaForgePrototypeApp(
+          state: PrototypeState.loaded,
+          conversionController: conversion,
+          previewController: preview,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('audio-fade-settings')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('audio-fade-settings')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('audio-fade-popover')), findsOneWidget);
+      expect(find.bySemanticsLabel('Fade in: Off'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('audio-fade-in-enabled')));
+      await tester.tap(find.byKey(const Key('audio-fade-out-enabled')));
+      await tester.tap(find.byKey(const Key('audio-fade-in-preset-500')));
+      await tester.tap(find.byKey(const Key('audio-fade-out-preset-3000')));
+      await tester.pumpAndSettle();
+
+      expect(conversion.audioFadeInEnabled, isTrue);
+      expect(conversion.audioFadeOutEnabled, isTrue);
+      expect(conversion.audioFadeInDurationMs, 500);
+      expect(conversion.audioFadeOutDurationMs, 3000);
+      expect(preview.audioFadeEnvelope, isNotNull);
+      expect(preview.audioFadeEnvelope!.startMs, 250);
+      expect(preview.audioFadeEnvelope!.endMs, 3606);
+      expect(preview.positionMs, 842);
+      expect(preview.seekCommands, isEmpty);
+
+      conversion.selectAudioFadeInDuration(10000);
+      conversion.selectAudioFadeOutDuration(10000);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('audio-fade-shortened')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('audio-fade-popover')), findsNothing);
+
+      conversion.selectMode(MediaOutputMode.videoOnly);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('audio-fade-settings')), findsNothing);
+      expect(preview.audioFadeEnvelope, isNull);
+    },
+  );
 
   testWidgets('trim values and playback speed summary share row alignment', (
     WidgetTester tester,
@@ -624,6 +686,9 @@ class _UnavailablePreviewController extends PreviewController {
   void setPlaybackRate(double rate) {}
 
   @override
+  void setAudioFadeEnvelope(PreviewAudioFadeEnvelope? envelope) {}
+
+  @override
   void togglePlayback() {}
 }
 
@@ -633,6 +698,7 @@ class _TrackingPreviewController extends PreviewController {
   final List<int> seekCommands = <int>[];
   final List<(int, int)> selectionCommands = <(int, int)>[];
   double _playbackRate = 1;
+  PreviewAudioFadeEnvelope? audioFadeEnvelope;
 
   @override
   double get playbackRate => _playbackRate;
@@ -682,6 +748,11 @@ class _TrackingPreviewController extends PreviewController {
   void setPlaybackRate(double rate) {
     _playbackRate = rate;
     notifyListeners();
+  }
+
+  @override
+  void setAudioFadeEnvelope(PreviewAudioFadeEnvelope? envelope) {
+    audioFadeEnvelope = envelope;
   }
 
   @override

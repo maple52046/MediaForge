@@ -202,6 +202,139 @@ impl Default for PlaybackRate {
     }
 }
 
+/// Validated requested audio fade durations in integer milliseconds.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct AudioFade {
+    fade_in_ms: u16,
+    fade_out_ms: u16,
+}
+
+impl AudioFade {
+    /// Shortest enabled fade duration in milliseconds.
+    pub const MIN_ENABLED_MS: u16 = 100;
+    /// Longest requested fade duration in milliseconds.
+    pub const MAX_MS: u16 = 10_000;
+    /// Supported fade-duration increment in milliseconds.
+    pub const STEP_MS: u16 = 100;
+
+    /// Creates independently configurable audio fade durations.
+    ///
+    /// Zero disables one side. Enabled values must be from 100 through 10,000
+    /// milliseconds in 100-millisecond increments.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MediaError::InvalidAudioFadeDuration`] when either value is
+    /// outside the supported range or increment.
+    pub fn new(fade_in_ms: u16, fade_out_ms: u16) -> Result<Self, MediaError> {
+        validate_audio_fade_duration(fade_in_ms)?;
+        validate_audio_fade_duration(fade_out_ms)?;
+        Ok(Self {
+            fade_in_ms,
+            fade_out_ms,
+        })
+    }
+
+    /// Returns the requested fade-in duration, or zero when disabled.
+    #[must_use]
+    pub const fn fade_in_ms(self) -> u16 {
+        self.fade_in_ms
+    }
+
+    /// Returns the requested fade-out duration, or zero when disabled.
+    #[must_use]
+    pub const fn fade_out_ms(self) -> u16 {
+        self.fade_out_ms
+    }
+
+    /// Resolves non-overlapping fades against the retimed audio duration.
+    ///
+    /// Requested values remain unchanged. When their sum exceeds the output
+    /// audio duration, the returned values are shortened proportionally with
+    /// the fade-out side receiving any remaining rounding millisecond.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MediaError::Unexpected`] if the retimed duration exceeds the
+    /// integer-millisecond representation used by media boundaries.
+    pub fn effective_for(
+        self,
+        trim: TrimRange,
+        playback_rate: PlaybackRate,
+    ) -> Result<EffectiveAudioFade, MediaError> {
+        let output_duration =
+            (u128::from(trim.duration_ms()) * 100).div_ceil(u128::from(playback_rate.percent()));
+        let output_duration_ms = u64::try_from(output_duration).map_err(|error| {
+            MediaError::Unexpected(format!("retimed audio duration overflowed: {error}"))
+        })?;
+        let requested_in = u64::from(self.fade_in_ms);
+        let requested_out = u64::from(self.fade_out_ms);
+        let requested_total = requested_in + requested_out;
+        let (fade_in_ms, fade_out_ms) = if requested_total <= output_duration_ms {
+            (requested_in, requested_out)
+        } else {
+            let proportional_in = u64::try_from(
+                u128::from(requested_in) * u128::from(output_duration_ms)
+                    / u128::from(requested_total),
+            )
+            .map_err(|error| {
+                MediaError::Unexpected(format!("effective audio fade overflowed: {error}"))
+            })?;
+            (proportional_in, output_duration_ms - proportional_in)
+        };
+        Ok(EffectiveAudioFade {
+            fade_in: fade_in_ms,
+            fade_out: fade_out_ms,
+            output_duration: output_duration_ms,
+        })
+    }
+}
+
+fn validate_audio_fade_duration(duration_ms: u16) -> Result<(), MediaError> {
+    if duration_ms == 0
+        || ((AudioFade::MIN_ENABLED_MS..=AudioFade::MAX_MS).contains(&duration_ms)
+            && duration_ms.is_multiple_of(AudioFade::STEP_MS))
+    {
+        Ok(())
+    } else {
+        Err(MediaError::InvalidAudioFadeDuration { duration_ms })
+    }
+}
+
+/// Effective non-overlapping audio fades for one retimed selection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EffectiveAudioFade {
+    fade_in: u64,
+    fade_out: u64,
+    output_duration: u64,
+}
+
+impl EffectiveAudioFade {
+    /// Returns the applied fade-in duration in milliseconds.
+    #[must_use]
+    pub const fn fade_in_ms(self) -> u64 {
+        self.fade_in
+    }
+
+    /// Returns the applied fade-out duration in milliseconds.
+    #[must_use]
+    pub const fn fade_out_ms(self) -> u64 {
+        self.fade_out
+    }
+
+    /// Returns the retimed output audio duration in milliseconds.
+    #[must_use]
+    pub const fn output_duration_ms(self) -> u64 {
+        self.output_duration
+    }
+
+    /// Returns whether proportional shortening changed either requested fade.
+    #[must_use]
+    pub const fn was_shortened(self, requested: AudioFade) -> bool {
+        self.fade_in != requested.fade_in_ms as u64 || self.fade_out != requested.fade_out_ms as u64
+    }
+}
+
 /// A validated half-open time range in milliseconds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TrimRange {
@@ -266,6 +399,8 @@ pub struct TranscodeRequest {
     pub video_playback_rate: PlaybackRate,
     /// Playback rate applied to outputs containing audio.
     pub audio_playback_rate: PlaybackRate,
+    /// Requested fade-in and fade-out durations for outputs containing audio.
+    pub audio_fade: AudioFade,
     /// Whether an existing destination may be replaced after successful encoding.
     pub overwrite: bool,
 }
@@ -395,6 +530,12 @@ pub enum MediaError {
         /// Requested integer percentage.
         percent: u16,
     },
+    /// An audio fade duration falls outside the supported range or increment.
+    #[error("invalid audio fade duration: {duration_ms} ms")]
+    InvalidAudioFadeDuration {
+        /// Requested duration in integer milliseconds.
+        duration_ms: u16,
+    },
     /// The destination already exists and overwrite was not approved.
     #[error("output already exists: {0}")]
     OutputExists(PathBuf),
@@ -520,6 +661,45 @@ mod tests {
         assert!(PlaybackRate::new(24).is_err());
         assert!(PlaybackRate::new(101).is_err());
         assert!(PlaybackRate::new(405).is_err());
+    }
+
+    #[test]
+    fn audio_fade_validates_requested_durations() {
+        assert_eq!(AudioFade::default(), AudioFade::new(0, 0).unwrap());
+        assert_eq!(
+            AudioFade::new(100, 10_000)
+                .map(|fade| (fade.fade_in_ms(), fade.fade_out_ms()))
+                .ok(),
+            Some((100, 10_000))
+        );
+        assert!(AudioFade::new(99, 0).is_err());
+        assert!(AudioFade::new(150, 0).is_err());
+        assert!(AudioFade::new(0, 10_100).is_err());
+    }
+
+    #[test]
+    fn audio_fade_uses_retimed_duration_and_shortens_proportionally() {
+        let trim = TrimRange::new(0, 1_000, 1_000).unwrap();
+        let fade = AudioFade::new(800, 800).unwrap();
+        let normal = fade.effective_for(trim, PlaybackRate::default()).unwrap();
+        assert_eq!(normal.output_duration_ms(), 1_000);
+        assert_eq!(normal.fade_in_ms(), 500);
+        assert_eq!(normal.fade_out_ms(), 500);
+        assert!(normal.was_shortened(fade));
+
+        let slow = AudioFade::new(1_000, 1_000)
+            .unwrap()
+            .effective_for(trim, PlaybackRate::new(25).unwrap())
+            .unwrap();
+        assert_eq!(slow.output_duration_ms(), 4_000);
+        assert_eq!((slow.fade_in_ms(), slow.fade_out_ms()), (1_000, 1_000));
+
+        let fast = AudioFade::new(1_000, 0)
+            .unwrap()
+            .effective_for(trim, PlaybackRate::new(400).unwrap())
+            .unwrap();
+        assert_eq!(fast.output_duration_ms(), 250);
+        assert_eq!((fast.fade_in_ms(), fast.fade_out_ms()), (250, 0));
     }
 
     #[test]

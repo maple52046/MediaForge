@@ -104,4 +104,7 @@ class PreviewPrototypeController extends PreviewController {
     _playbackRate = rate;
     notifyListeners();
   }
+
+  @override
+  void setAudioFadeEnvelope(PreviewAudioFadeEnvelope? envelope) {}
 }

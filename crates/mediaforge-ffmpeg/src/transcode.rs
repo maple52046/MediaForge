@@ -9,8 +9,8 @@ use ffmpeg::{
 };
 use ffmpeg_next as ffmpeg;
 use mediaforge_core::{
-    Cancellation, MediaError, OutputMode, PlaybackRate, ProgressObserver, ProgressUpdate,
-    TranscodeRequest, TrimRange, VideoQuality,
+    AudioFade, Cancellation, MediaError, OutputMode, PlaybackRate, ProgressObserver,
+    ProgressUpdate, TranscodeRequest, TrimRange, VideoQuality,
 };
 
 static TEMPORARY_OUTPUT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -101,6 +101,7 @@ fn transcode_to(
             request.audio_quality.bitrate(),
             request.trim,
             request.audio_playback_rate,
+            request.audio_fade,
         )?)
     } else {
         None
@@ -470,6 +471,7 @@ impl AudioTranscoder {
         mp3_bitrate: usize,
         trim: TrimRange,
         playback_rate: PlaybackRate,
+        audio_fade: AudioFade,
     ) -> Result<Self, MediaError> {
         let mut decoder = codec::context::Context::from_parameters(input.parameters())
             .and_then(|context| context.decoder().audio())
@@ -527,7 +529,8 @@ impl AudioTranscoder {
             .map_err(|error| MediaError::EncoderUnavailable(error.to_string()))?;
         output_stream.set_time_base(encoder_time_base);
         output_stream.set_parameters(&audio_encoder);
-        let filter = create_audio_filter(&decoder, &audio_encoder, trim, playback_rate)?;
+        let filter =
+            create_audio_filter(&decoder, &audio_encoder, trim, playback_rate, audio_fade)?;
 
         Ok(Self {
             stream_index: input.index(),
@@ -656,6 +659,7 @@ fn create_audio_filter(
     encoder: &codec::encoder::audio::Encoder,
     trim: TrimRange,
     playback_rate: PlaybackRate,
+    audio_fade: AudioFade,
 ) -> Result<filter::Graph, MediaError> {
     let mut graph = filter::Graph::new();
     let input_layout = if decoder.channel_layout().is_empty() {
@@ -692,16 +696,39 @@ fn create_audio_filter(
             "",
         )
         .map_err(|error| MediaError::DecodeFailed(error.to_string()))?;
-    let tempo = audio_tempo_filter(playback_rate);
-    let spec = format!(
-        "atrim=start={:.3}:end={:.3},asetpts=PTS-STARTPTS,{tempo},aresample={},aformat=sample_fmts={}:sample_rates={}:channel_layouts=0x{:x}",
-        milliseconds_to_seconds(trim.start_ms()),
-        milliseconds_to_seconds(trim.end_ms()),
-        encoder.rate(),
+    let effective_fade = audio_fade.effective_for(trim, playback_rate)?;
+    let mut stages = vec![
+        format!(
+            "atrim=start={:.3}:end={:.3}",
+            milliseconds_to_seconds(trim.start_ms()),
+            milliseconds_to_seconds(trim.end_ms())
+        ),
+        "asetpts=PTS-STARTPTS".to_owned(),
+        audio_tempo_filter(playback_rate),
+    ];
+    if effective_fade.fade_in_ms() > 0 {
+        stages.push(format!(
+            "afade=t=in:st=0:d={:.3}:curve=tri",
+            milliseconds_to_seconds(effective_fade.fade_in_ms())
+        ));
+    }
+    if effective_fade.fade_out_ms() > 0 {
+        stages.push(format!(
+            "afade=t=out:st={:.3}:d={:.3}:curve=tri",
+            milliseconds_to_seconds(
+                effective_fade.output_duration_ms() - effective_fade.fade_out_ms()
+            ),
+            milliseconds_to_seconds(effective_fade.fade_out_ms())
+        ));
+    }
+    stages.push(format!("aresample={}", encoder.rate()));
+    stages.push(format!(
+        "aformat=sample_fmts={}:sample_rates={}:channel_layouts=0x{:x}",
         encoder.format().name(),
         encoder.rate(),
         encoder.channel_layout().bits()
-    );
+    ));
+    let spec = stages.join(",");
     graph
         .output("in", 0)
         .and_then(|output| output.input("out", 0))

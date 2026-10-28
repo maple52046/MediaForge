@@ -197,9 +197,43 @@ class MfStrings {
   String get audioSpeed => _zh ? 'Audio 速度' : 'Audio speed';
 
   /// Preview limitation shown for independently retimed output streams.
-  String get independentSpeedPreviewWarning => _zh
-      ? '預覽僅使用 Video 速度；Audio 的獨立速度會在匯出結果中套用。'
-      : 'Preview uses the Video speed only. The independent Audio speed is applied to the exported file.';
+  String independentSpeedPreviewWarning({required bool includesAudioFade}) {
+    if (includesAudioFade) {
+      return _zh
+          ? '預覽僅使用 Video 速度；Audio 的獨立速度與淡入淡出實際時長會在匯出結果中套用。'
+          : 'Preview uses the Video speed only. The independent Audio speed and exact fade timing are applied to the exported file.';
+    }
+    return _zh
+        ? '預覽僅使用 Video 速度；Audio 的獨立速度會在匯出結果中套用。'
+        : 'Preview uses the Video speed only. The independent Audio speed is applied to the exported file.';
+  }
+
+  /// Audio fade settings label.
+  String get audioFades => _zh ? '音訊淡入淡出' : 'Audio fades';
+
+  /// Fade-in effect label.
+  String get fadeIn => _zh ? '淡入' : 'Fade in';
+
+  /// Fade-out effect label.
+  String get fadeOut => _zh ? '淡出' : 'Fade out';
+
+  /// Enabled control state.
+  String get enabled => _zh ? '啟用' : 'On';
+
+  /// Disabled control state.
+  String get disabled => _zh ? '關閉' : 'Off';
+
+  /// Formats an audio fade duration with tenth-second precision.
+  String audioFadeDuration(int durationMs) {
+    final seconds = (durationMs / 1000).toStringAsFixed(1);
+    return _zh ? '$seconds 秒' : '${seconds}s';
+  }
+
+  /// Discloses proportionally shortened fade durations for a short selection.
+  String shortenedAudioFades(String fadeInDuration, String fadeOutDuration) =>
+      _zh
+      ? '目前片段較短，預覽與匯出將使用淡入 $fadeInDuration、淡出 $fadeOutDuration。'
+      : 'For this short selection, preview and export use $fadeInDuration fade-in and $fadeOutDuration fade-out.';
 
   /// High MP3 quality label.
   String get high => _zh ? '高' : 'High';
@@ -392,6 +426,8 @@ class MfStrings {
       _zh ? '裁切範圍無效' : 'The trim range is invalid',
     ConversionErrorCode.invalidPlaybackRate =>
       _zh ? '播放速度無效' : 'The playback speed is invalid',
+    ConversionErrorCode.invalidAudioFadeDuration =>
+      _zh ? '音訊淡入淡出時長無效' : 'The audio fade duration is invalid',
     ConversionErrorCode.outputExists =>
       _zh ? '目的檔已存在' : 'The destination already exists',
     ConversionErrorCode.outputCreateFailed =>

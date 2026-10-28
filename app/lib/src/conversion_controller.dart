@@ -94,6 +94,10 @@ class ConversionController extends ChangeNotifier {
   bool _playbackRatesLinked = true;
   int _videoPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
   int _audioPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
+  bool _audioFadeInEnabled = false;
+  bool _audioFadeOutEnabled = false;
+  int _audioFadeInDurationMs = ConversionAudioFade.defaultMs;
+  int _audioFadeOutDurationMs = ConversionAudioFade.defaultMs;
   bool _converting;
   double _progress;
   ConversionJobState _jobState;
@@ -136,6 +140,38 @@ class ConversionController extends ChangeNotifier {
 
   /// Selected audio playback rate as an integer percentage.
   int get audioPlaybackRatePercent => _audioPlaybackRatePercent;
+
+  /// Whether audio fade-in is enabled for outputs containing audio.
+  bool get audioFadeInEnabled => _audioFadeInEnabled;
+
+  /// Whether audio fade-out is enabled for outputs containing audio.
+  bool get audioFadeOutEnabled => _audioFadeOutEnabled;
+
+  /// Retained fade-in duration used when the effect is enabled.
+  int get audioFadeInDurationMs => _audioFadeInDurationMs;
+
+  /// Retained fade-out duration used when the effect is enabled.
+  int get audioFadeOutDurationMs => _audioFadeOutDurationMs;
+
+  /// Requested fade-in duration sent across the conversion boundary.
+  int get requestedAudioFadeInMs =>
+      _audioFadeInEnabled ? _audioFadeInDurationMs : 0;
+
+  /// Requested fade-out duration sent across the conversion boundary.
+  int get requestedAudioFadeOutMs =>
+      _audioFadeOutEnabled ? _audioFadeOutDurationMs : 0;
+
+  /// Whether at least one audio fade effect is active.
+  bool get hasAudioFade => _audioFadeInEnabled || _audioFadeOutEnabled;
+
+  /// Resolves effective fades for the current trim and audio rate.
+  EffectiveAudioFadeDurations effectiveAudioFadeFor(int selectedDurationMs) =>
+      ConversionAudioFade.resolve(
+        selectedDurationMs: selectedDurationMs,
+        audioPlaybackRatePercent: _audioPlaybackRatePercent,
+        fadeInMs: requestedAudioFadeInMs,
+        fadeOutMs: requestedAudioFadeOutMs,
+      );
 
   /// Rate applied by the single-clock native preview player.
   int get previewPlaybackRatePercent => switch (_mode) {
@@ -225,6 +261,10 @@ class ConversionController extends ChangeNotifier {
     _playbackRatesLinked = true;
     _videoPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
     _audioPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
+    _audioFadeInEnabled = false;
+    _audioFadeOutEnabled = false;
+    _audioFadeInDurationMs = ConversionAudioFade.defaultMs;
+    _audioFadeOutDurationMs = ConversionAudioFade.defaultMs;
     _completedOutputPath = null;
     _failure = null;
     _pendingOverwriteRequest = null;
@@ -354,6 +394,52 @@ class ConversionController extends ChangeNotifier {
     _notifyListeners();
   }
 
+  /// Enables or disables fade-in while retaining its configured duration.
+  void setAudioFadeInEnabled(bool enabled) {
+    if (_converting || _audioFadeInEnabled == enabled) {
+      return;
+    }
+    _audioFadeInEnabled = enabled;
+    _completedOutputPath = null;
+    _failure = null;
+    _notifyListeners();
+  }
+
+  /// Enables or disables fade-out while retaining its configured duration.
+  void setAudioFadeOutEnabled(bool enabled) {
+    if (_converting || _audioFadeOutEnabled == enabled) {
+      return;
+    }
+    _audioFadeOutEnabled = enabled;
+    _completedOutputPath = null;
+    _failure = null;
+    _notifyListeners();
+  }
+
+  /// Selects the retained fade-in duration in integer milliseconds.
+  void selectAudioFadeInDuration(int durationMs) {
+    _validateAudioFadeDuration(durationMs);
+    if (_converting || _audioFadeInDurationMs == durationMs) {
+      return;
+    }
+    _audioFadeInDurationMs = durationMs;
+    _completedOutputPath = null;
+    _failure = null;
+    _notifyListeners();
+  }
+
+  /// Selects the retained fade-out duration in integer milliseconds.
+  void selectAudioFadeOutDuration(int durationMs) {
+    _validateAudioFadeDuration(durationMs);
+    if (_converting || _audioFadeOutDurationMs == durationMs) {
+      return;
+    }
+    _audioFadeOutDurationMs = durationMs;
+    _completedOutputPath = null;
+    _failure = null;
+    _notifyListeners();
+  }
+
   /// Removes source and destination state after the media session is cleared.
   void clearMedia() {
     if (_converting || _closed) {
@@ -471,6 +557,8 @@ class ConversionController extends ChangeNotifier {
         audioQuality: _audioQuality,
         videoPlaybackRatePercent: _videoPlaybackRatePercent,
         audioPlaybackRatePercent: _audioPlaybackRatePercent,
+        audioFadeInMs: requestedAudioFadeInMs,
+        audioFadeOutMs: requestedAudioFadeOutMs,
         startMs: startMs,
         endMs: endMs,
         overwrite: false,
@@ -494,6 +582,8 @@ class ConversionController extends ChangeNotifier {
         audioQuality: request.audioQuality,
         videoPlaybackRatePercent: request.videoPlaybackRatePercent,
         audioPlaybackRatePercent: request.audioPlaybackRatePercent,
+        audioFadeInMs: request.audioFadeInMs,
+        audioFadeOutMs: request.audioFadeOutMs,
         startMs: request.startMs,
         endMs: request.endMs,
         overwrite: true,
@@ -561,6 +651,16 @@ class ConversionController extends ChangeNotifier {
         percent,
         'percent',
         'must be between 25 and 400 in five-percent increments',
+      );
+    }
+  }
+
+  static void _validateAudioFadeDuration(int durationMs) {
+    if (durationMs == 0 || !ConversionAudioFade.isSupported(durationMs)) {
+      throw ArgumentError.value(
+        durationMs,
+        'durationMs',
+        'must be between 100 and 10000 in hundred-millisecond increments',
       );
     }
   }

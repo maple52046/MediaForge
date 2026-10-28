@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mediaforge_core::{
-    AudioQuality, Cancellation, MediaBackend, MediaError, OutputMode, PlaybackRate,
+    AudioFade, AudioQuality, Cancellation, MediaBackend, MediaError, OutputMode, PlaybackRate,
     ProgressObserver, ProgressUpdate, TranscodeRequest, TrimRange, VideoQuality,
 };
 use mediaforge_ffmpeg::FfmpegBackend;
@@ -92,6 +92,7 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
                     audio_quality: quality,
                     video_playback_rate: PlaybackRate::default(),
                     audio_playback_rate: PlaybackRate::default(),
+                    audio_fade: AudioFade::default(),
                     overwrite: false,
                 },
                 &progress,
@@ -121,6 +122,7 @@ fn converts_all_supported_output_modes_and_cleans_cancelled_output() {
             audio_quality: AudioQuality::Medium,
             video_playback_rate: PlaybackRate::default(),
             audio_playback_rate: PlaybackRate::default(),
+            audio_fade: AudioFade::default(),
             overwrite: false,
         },
         &RecordedProgress::default(),
@@ -193,6 +195,7 @@ fn playback_rates_change_duration_and_preserve_the_longer_stream() {
                         .expect("test video rate must be valid"),
                     audio_playback_rate: PlaybackRate::new(audio_rate)
                         .expect("test audio rate must be valid"),
+                    audio_fade: AudioFade::default(),
                     overwrite: false,
                 },
                 &progress,
@@ -213,6 +216,66 @@ fn playback_rates_change_duration_and_preserve_the_longer_stream() {
             .expect("progress lock must remain healthy")
             .last()
             .is_some_and(|sample| (sample.percent() - 100.0).abs() < f64::EPSILON));
+    }
+}
+
+#[test]
+#[ignore = "requires the developer-only FFmpeg CLI and macOS VideoToolbox"]
+fn audio_fades_shape_audiovisual_and_audio_only_output() {
+    let workspace = tempfile::tempdir().expect("test workspace must be created");
+    let source = workspace.path().join("source.mp4");
+    generate_fixture(&source);
+    let backend = FfmpegBackend::new().expect("FFmpeg must initialize");
+    let source_info = backend.probe(&source).expect("fixture must be probed");
+    let trim = TrimRange::new(0, 2_000, source_info.duration_ms)
+        .expect("fixture must contain the fade selection");
+
+    for (name, mode, audio_rate, fade) in [
+        (
+            "fades.mp4",
+            OutputMode::VideoWithAudio,
+            PlaybackRate::default(),
+            AudioFade::new(500, 500).expect("test fades must be valid"),
+        ),
+        (
+            "fades.mp3",
+            OutputMode::AudioOnly,
+            PlaybackRate::new(200).expect("test rate must be valid"),
+            AudioFade::new(800, 800).expect("test fades must be valid"),
+        ),
+    ] {
+        let output = workspace.path().join(name);
+        backend
+            .transcode(
+                &TranscodeRequest {
+                    input_path: source.clone(),
+                    output_path: output.clone(),
+                    mode,
+                    trim,
+                    video_quality: VideoQuality::Balanced,
+                    audio_quality: AudioQuality::Medium,
+                    video_playback_rate: PlaybackRate::default(),
+                    audio_playback_rate: audio_rate,
+                    audio_fade: fade,
+                    overwrite: false,
+                },
+                &RecordedProgress::default(),
+                Arc::new(NeverCancelled),
+            )
+            .unwrap_or_else(|error| panic!("{name} fade transcode failed: {error}"));
+
+        let samples = decode_mono_f32(&output, &workspace.path().join(format!("{name}.f32")));
+        let start_level = mean_absolute_window(&samples, 0, 5);
+        let middle_level = mean_absolute_window(&samples, 48, 52);
+        let end_level = mean_absolute_window(&samples, 95, 100);
+        assert!(
+            start_level < middle_level * 0.35,
+            "{name} fade-in level {start_level} was not below middle {middle_level}"
+        );
+        assert!(
+            end_level < middle_level * 0.35,
+            "{name} fade-out level {end_level} was not below middle {middle_level}"
+        );
     }
 }
 
@@ -248,6 +311,7 @@ fn video_quality_outputs_have_monotonic_sizes() {
                     audio_quality: AudioQuality::Medium,
                     video_playback_rate: PlaybackRate::default(),
                     audio_playback_rate: PlaybackRate::default(),
+                    audio_fade: AudioFade::default(),
                     overwrite: false,
                 },
                 &RecordedProgress::default(),
@@ -315,6 +379,7 @@ fn validates_representative_user_media_without_mutating_the_source() {
                     audio_quality: quality,
                     video_playback_rate: PlaybackRate::default(),
                     audio_playback_rate: PlaybackRate::default(),
+                    audio_fade: AudioFade::default(),
                     overwrite: false,
                 },
                 &RecordedProgress::default(),
@@ -338,6 +403,7 @@ fn validates_representative_user_media_without_mutating_the_source() {
             audio_quality: AudioQuality::Medium,
             video_playback_rate: PlaybackRate::default(),
             audio_playback_rate: PlaybackRate::default(),
+            audio_fade: AudioFade::default(),
             overwrite: false,
         },
         cancellation.as_ref(),
@@ -393,6 +459,7 @@ fn validates_balanced_quality_reference_size_and_bitrate() {
                 audio_quality: AudioQuality::Medium,
                 video_playback_rate: PlaybackRate::default(),
                 audio_playback_rate: PlaybackRate::default(),
+                audio_fade: AudioFade::default(),
                 overwrite: false,
             },
             &RecordedProgress::default(),
@@ -464,6 +531,40 @@ fn generate_fixture(path: &Path) {
         .status()
         .expect("developer FFmpeg CLI must be installed");
     assert!(status.success(), "synthetic fixture generation failed");
+}
+
+fn decode_mono_f32(path: &Path, raw_path: &Path) -> Vec<f32> {
+    let status = Command::new("ffmpeg")
+        .args(["-hide_banner", "-loglevel", "error", "-i"])
+        .arg(path)
+        .args([
+            "-map", "0:a:0", "-ac", "1", "-ar", "48000", "-f", "f32le", "-y",
+        ])
+        .arg(raw_path)
+        .status()
+        .expect("developer FFmpeg CLI must decode fade output");
+    assert!(status.success(), "fade output decoding failed");
+    std::fs::read(raw_path)
+        .expect("decoded fade samples must be readable")
+        .chunks_exact(4)
+        .map(|bytes| f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        .collect()
+}
+
+fn mean_absolute_window(samples: &[f32], start_percent: usize, end_percent: usize) -> f64 {
+    let start = samples.len() * start_percent / 100;
+    let end = samples.len() * end_percent / 100;
+    let window = &samples[start..end];
+    assert!(
+        !window.is_empty(),
+        "fade amplitude window must contain samples"
+    );
+    let window_len = u32::try_from(window.len()).expect("amplitude window must fit in u32");
+    window
+        .iter()
+        .map(|sample| f64::from(sample.abs()))
+        .sum::<f64>()
+        / f64::from(window_len)
 }
 
 fn generate_quality_fixture(path: &Path) {

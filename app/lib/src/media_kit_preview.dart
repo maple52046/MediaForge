@@ -17,9 +17,6 @@ abstract interface class PreviewPlaybackDriver {
   /// Current duration in integer milliseconds.
   Stream<int> get durationMs;
 
-  /// Current volume rounded to an integer percentage.
-  Stream<int> get volumePercent;
-
   /// Whether the current source reached its end.
   Stream<bool> get completed;
 
@@ -81,7 +78,6 @@ class MediaKitPreviewController extends PreviewController {
     _playingSubscription = _driver.playing.listen(_setPlaying);
     _positionSubscription = _driver.positionMs.listen(_setPosition);
     _durationSubscription = _driver.durationMs.listen(_setDuration);
-    _volumeSubscription = _driver.volumePercent.listen(_setVolume);
     _completedSubscription = _driver.completed.listen(_setCompleted);
     _errorSubscription = _driver.errors.listen(_setUnavailable);
     initialized = _initialize(source);
@@ -91,9 +87,9 @@ class MediaKitPreviewController extends PreviewController {
   late final StreamSubscription<bool> _playingSubscription;
   late final StreamSubscription<int> _positionSubscription;
   late final StreamSubscription<int> _durationSubscription;
-  late final StreamSubscription<int> _volumeSubscription;
   late final StreamSubscription<bool> _completedSubscription;
   late final StreamSubscription<String> _errorSubscription;
+  Future<void> _volumeCommand = Future<void>.value();
   Future<void>? _closeFuture;
   bool _closed = false;
   PreviewAvailability _availability = PreviewAvailability.opening;
@@ -101,7 +97,9 @@ class MediaKitPreviewController extends PreviewController {
   int _positionMs = 0;
   int _durationMs = 0;
   int _volumePercent = 78;
+  int _effectiveVolumePercent = 78;
   double _playbackRate = 1;
+  PreviewAudioFadeEnvelope? _audioFadeEnvelope;
   String? _diagnostic;
   int? _selectionEndMs;
   bool _selectionStopRequested = false;
@@ -161,6 +159,7 @@ class MediaKitPreviewController extends PreviewController {
     final intent = ++_playbackIntent;
     _selectionEndMs = end;
     _selectionStopRequested = false;
+    _queueEffectiveVolume(positionMs: start);
     _schedule(() async {
       await _driver.seek(start);
       if (_closed || intent != _playbackIntent) {
@@ -179,6 +178,7 @@ class MediaKitPreviewController extends PreviewController {
     final intent = ++_playbackIntent;
     _selectionEndMs = null;
     _selectionStopRequested = false;
+    _queueEffectiveVolume(positionMs: position);
     _schedule(() async {
       if (_closed || intent != _playbackIntent) {
         return;
@@ -192,7 +192,13 @@ class MediaKitPreviewController extends PreviewController {
     if (_availability == PreviewAvailability.unavailable) {
       return;
     }
-    _schedule(() => _driver.setVolume(volumePercent.clamp(0, 100)));
+    final next = volumePercent.clamp(0, 100);
+    if (_volumePercent == next) {
+      return;
+    }
+    _volumePercent = next;
+    notifyListeners();
+    _queueEffectiveVolume(force: true);
   }
 
   @override
@@ -209,12 +215,22 @@ class MediaKitPreviewController extends PreviewController {
     _schedule(() => _driver.setPlaybackRate(rate));
   }
 
+  @override
+  void setAudioFadeEnvelope(PreviewAudioFadeEnvelope? envelope) {
+    if (_audioFadeEnvelope == envelope) {
+      return;
+    }
+    _audioFadeEnvelope = envelope;
+    _queueEffectiveVolume(force: true);
+  }
+
   /// Cancels stream subscriptions and awaits native player disposal once.
   Future<void> close() => _closeFuture ??= _close();
 
   Future<void> _initialize(String source) async {
     try {
       await _driver.setVolume(_volumePercent);
+      _effectiveVolumePercent = _volumePercent;
       await _driver.open(_normalizePreviewSource(source));
       await _driver.setPlaybackRate(_playbackRate);
       if (!_closed && _availability != PreviewAvailability.unavailable) {
@@ -236,6 +252,27 @@ class MediaKitPreviewController extends PreviewController {
     } on Object catch (error) {
       _setUnavailable(error.toString());
     }
+  }
+
+  void _queueEffectiveVolume({int? positionMs, bool force = false}) {
+    if (_closed || _availability == PreviewAvailability.unavailable) {
+      return;
+    }
+    final gain = _audioFadeEnvelope?.gainAt(positionMs ?? _positionMs) ?? 1;
+    final effective = (_volumePercent * gain).round().clamp(0, 100);
+    if (!force && _effectiveVolumePercent == effective) {
+      return;
+    }
+    _effectiveVolumePercent = effective;
+    _volumeCommand = _volumeCommand
+        .then<void>((_) async {
+          if (!_closed) {
+            await _driver.setVolume(_effectiveVolumePercent);
+          }
+        })
+        .catchError((Object error) {
+          _setUnavailable(error.toString());
+        });
   }
 
   int _boundedPosition(int positionMs) {
@@ -266,6 +303,7 @@ class MediaKitPreviewController extends PreviewController {
     final position = reachedSelectionEnd ? selectionEnd : bounded;
     var changed = _positionMs != position;
     _positionMs = position;
+    _queueEffectiveVolume();
     if (reachedSelectionEnd && !_selectionStopRequested) {
       _selectionStopRequested = true;
       changed = changed || _playing;
@@ -303,15 +341,6 @@ class MediaKitPreviewController extends PreviewController {
     notifyListeners();
   }
 
-  void _setVolume(int volumePercent) {
-    final volume = volumePercent.clamp(0, 100);
-    if (_closed || _volumePercent == volume) {
-      return;
-    }
-    _volumePercent = volume;
-    notifyListeners();
-  }
-
   void _setCompleted(bool completed) {
     if (!completed || _closed || !_playing) {
       return;
@@ -342,9 +371,9 @@ class MediaKitPreviewController extends PreviewController {
         _playingSubscription.cancel(),
         _positionSubscription.cancel(),
         _durationSubscription.cancel(),
-        _volumeSubscription.cancel(),
         _completedSubscription.cancel(),
         _errorSubscription.cancel(),
+        _volumeCommand,
       ]);
     } finally {
       await _driver.close();
@@ -400,10 +429,6 @@ class _MediaKitPlaybackDriver implements PreviewPlaybackDriver {
   @override
   Stream<int> get positionMs =>
       _player.stream.position.map((Duration value) => value.inMilliseconds);
-
-  @override
-  Stream<int> get volumePercent =>
-      _player.stream.volume.map((double value) => value.round());
 
   @override
   Future<void> close() => _player.dispose();

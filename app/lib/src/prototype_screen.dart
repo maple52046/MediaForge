@@ -725,7 +725,9 @@ class _PreviewColumn extends StatelessWidget {
           if (conversion.showIndependentPreviewWarning) ...[
             const SizedBox(height: MfSpacing.sm),
             _IndependentSpeedPreviewWarning(
-              message: MfStrings.of(context).independentSpeedPreviewWarning,
+              message: MfStrings.of(context).independentSpeedPreviewWarning(
+                includesAudioFade: conversion.hasAudioFade,
+              ),
             ),
           ],
           const SizedBox(height: MfSpacing.md),
@@ -1396,19 +1398,28 @@ class _ConversionPane extends StatelessWidget {
         color: MfPalette.surface,
         border: Border(left: BorderSide(color: MfPalette.border)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(MfSpacing.lg),
-        child: conversion.converting
-            ? _ConvertingContent(
-                mediaSession: mediaSession,
-                timeline: timeline,
-                conversion: conversion,
-              )
-            : _ReadyContent(
-                mediaSession: mediaSession,
-                timeline: timeline,
-                conversion: conversion,
-              ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxHeight <= 640;
+          return Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: MfSpacing.lg,
+              vertical: compact ? MfSpacing.xs : MfSpacing.md,
+            ),
+            child: conversion.converting
+                ? _ConvertingContent(
+                    mediaSession: mediaSession,
+                    timeline: timeline,
+                    conversion: conversion,
+                  )
+                : _ReadyContent(
+                    mediaSession: mediaSession,
+                    timeline: timeline,
+                    conversion: conversion,
+                    compact: compact,
+                  ),
+          );
+        },
       ),
     );
   }
@@ -1419,11 +1430,13 @@ class _ReadyContent extends StatelessWidget {
     required this.mediaSession,
     required this.timeline,
     required this.conversion,
+    required this.compact,
   });
 
   final MediaSessionController mediaSession;
   final TimelineController timeline;
   final ConversionController conversion;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1440,7 +1453,7 @@ class _ReadyContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _PaneTitle(title: strings.export, caption: strings.exportCaption),
-        const SizedBox(height: MfSpacing.md),
+        SizedBox(height: compact ? MfSpacing.sm : MfSpacing.md),
         _SectionLabel(strings.source),
         const SizedBox(height: MfSpacing.xs),
         _SourceSummary(
@@ -1458,6 +1471,11 @@ class _ReadyContent extends StatelessWidget {
         _OptionRow(label: strings.video, value: values.video),
         _OptionRow(label: strings.audio, value: values.audio),
         _PlaybackSpeedControl(conversion: conversion),
+        if (conversion.mode != MediaOutputMode.videoOnly)
+          _AudioFadeControl(
+            conversion: conversion,
+            selectedDurationMs: timeline.selectedDurationMs,
+          ),
         if (conversion.mode != MediaOutputMode.audioOnly) ...[
           const SizedBox(height: MfSpacing.sm),
           _SectionLabel(strings.videoQuality),
@@ -2381,6 +2399,290 @@ String _playbackRateLabel(int percent) {
   final multiplier = percent / 100;
   final decimals = percent % 100 == 0 ? 0 : (percent % 10 == 0 ? 1 : 2);
   return '${multiplier.toStringAsFixed(decimals)}×';
+}
+
+class _AudioFadeControl extends StatefulWidget {
+  const _AudioFadeControl({
+    required this.conversion,
+    required this.selectedDurationMs,
+  });
+
+  final ConversionController conversion;
+  final int selectedDurationMs;
+
+  @override
+  State<_AudioFadeControl> createState() => _AudioFadeControlState();
+}
+
+class _AudioFadeControlState extends State<_AudioFadeControl> {
+  late final ShadPopoverController _popoverController;
+
+  @override
+  void initState() {
+    super.initState();
+    _popoverController = ShadPopoverController();
+  }
+
+  @override
+  void didUpdateWidget(_AudioFadeControl oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.conversion.converting) {
+      _popoverController.hide();
+    }
+  }
+
+  @override
+  void dispose() {
+    _popoverController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
+    final summary = _audioFadeSummary(widget.conversion, strings);
+    return ShadPopover(
+      controller: _popoverController,
+      closeOnTapOutside: true,
+      padding: EdgeInsets.zero,
+      popover: (BuildContext context) => _AudioFadePopover(
+        conversion: widget.conversion,
+        selectedDurationMs: widget.selectedDurationMs,
+      ),
+      child: Semantics(
+        button: true,
+        label: '${strings.audioFades}: $summary',
+        child: ShadButton.ghost(
+          key: const Key('audio-fade-settings'),
+          width: double.infinity,
+          height: 26,
+          padding: EdgeInsets.zero,
+          onPressed: widget.conversion.converting
+              ? null
+              : _popoverController.toggle,
+          child: SizedBox(
+            width: 320,
+            child: _OptionRowContent(label: strings.audioFades, value: summary),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AudioFadePopover extends StatelessWidget {
+  const _AudioFadePopover({
+    required this.conversion,
+    required this.selectedDurationMs,
+  });
+
+  final ConversionController conversion;
+  final int selectedDurationMs;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
+    final effective = conversion.effectiveAudioFadeFor(selectedDurationMs);
+    return Container(
+      key: const Key('audio-fade-popover'),
+      width: 328,
+      padding: const EdgeInsets.all(MfSpacing.md),
+      decoration: BoxDecoration(
+        color: MfPalette.elevated,
+        borderRadius: BorderRadius.circular(MfRadius.lg),
+        border: Border.all(color: MfPalette.accent),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            strings.audioFades,
+            style: TextStyle(
+              color: MfPalette.foreground,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: MfSpacing.md),
+          _AudioFadeEditor(
+            controlKey: 'audio-fade-in',
+            label: strings.fadeIn,
+            enabled: conversion.audioFadeInEnabled,
+            durationMs: conversion.audioFadeInDurationMs,
+            onEnabledChanged: conversion.setAudioFadeInEnabled,
+            onCommitted: conversion.selectAudioFadeInDuration,
+          ),
+          const SizedBox(height: MfSpacing.md),
+          _AudioFadeEditor(
+            controlKey: 'audio-fade-out',
+            label: strings.fadeOut,
+            enabled: conversion.audioFadeOutEnabled,
+            durationMs: conversion.audioFadeOutDurationMs,
+            onEnabledChanged: conversion.setAudioFadeOutEnabled,
+            onCommitted: conversion.selectAudioFadeOutDuration,
+          ),
+          if (effective.wasShortened) ...[
+            const SizedBox(height: MfSpacing.sm),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                strings.shortenedAudioFades(
+                  strings.audioFadeDuration(effective.fadeInMs),
+                  strings.audioFadeDuration(effective.fadeOutMs),
+                ),
+                key: const Key('audio-fade-shortened'),
+                style: TextStyle(color: MfPalette.muted, fontSize: 10),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AudioFadeEditor extends StatefulWidget {
+  const _AudioFadeEditor({
+    required this.controlKey,
+    required this.label,
+    required this.enabled,
+    required this.durationMs,
+    required this.onEnabledChanged,
+    required this.onCommitted,
+  });
+
+  final String controlKey;
+  final String label;
+  final bool enabled;
+  final int durationMs;
+  final ValueChanged<bool> onEnabledChanged;
+  final ValueChanged<int> onCommitted;
+
+  @override
+  State<_AudioFadeEditor> createState() => _AudioFadeEditorState();
+}
+
+class _AudioFadeEditorState extends State<_AudioFadeEditor> {
+  static const _presets = <int>[500, 1000, 2000, 3000, 5000];
+  late int _draftDurationMs;
+
+  @override
+  void initState() {
+    super.initState();
+    _draftDurationMs = widget.durationMs;
+  }
+
+  @override
+  void didUpdateWidget(_AudioFadeEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.durationMs != widget.durationMs) {
+      _draftDurationMs = widget.durationMs;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = MfStrings.of(context);
+    final stateLabel = widget.enabled ? strings.enabled : strings.disabled;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.label,
+                style: TextStyle(color: MfPalette.muted, fontSize: 11),
+              ),
+            ),
+            Text(
+              strings.audioFadeDuration(_draftDurationMs),
+              key: Key('${widget.controlKey}-value'),
+              style: TextStyle(
+                color: MfPalette.foreground,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: MfSpacing.xs),
+            Semantics(
+              button: true,
+              toggled: widget.enabled,
+              label: '${widget.label}: $stateLabel',
+              child: ShadButton.outline(
+                key: Key('${widget.controlKey}-enabled'),
+                height: 26,
+                padding: const EdgeInsets.symmetric(horizontal: MfSpacing.xs),
+                onPressed: () => widget.onEnabledChanged(!widget.enabled),
+                child: Text(stateLabel),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: MfSpacing.xs),
+        ShadSlider(
+          key: Key('${widget.controlKey}-slider-${widget.durationMs}'),
+          initialValue: widget.durationMs.toDouble(),
+          min: ConversionAudioFade.minEnabledMs.toDouble(),
+          max: ConversionAudioFade.maxMs.toDouble(),
+          divisions:
+              (ConversionAudioFade.maxMs - ConversionAudioFade.minEnabledMs) ~/
+              ConversionAudioFade.stepMs,
+          label: strings.audioFadeDuration(_draftDurationMs),
+          semanticFormatterCallback: (double value) =>
+              '${widget.label} ${strings.audioFadeDuration(_fadeDurationMs(value))}',
+          onChanged: (double value) {
+            setState(() => _draftDurationMs = _fadeDurationMs(value));
+          },
+          onChangeEnd: (double value) {
+            final durationMs = _fadeDurationMs(value);
+            setState(() => _draftDurationMs = durationMs);
+            widget.onCommitted(durationMs);
+          },
+        ),
+        const SizedBox(height: MfSpacing.sm),
+        Wrap(
+          spacing: MfSpacing.xxs,
+          runSpacing: MfSpacing.xxs,
+          children: [
+            for (final preset in _presets)
+              SizedBox(
+                width: 56,
+                child: ShadButton.outline(
+                  key: Key('${widget.controlKey}-preset-$preset'),
+                  height: 28,
+                  padding: EdgeInsets.zero,
+                  onPressed: () {
+                    setState(() => _draftDurationMs = preset);
+                    widget.onCommitted(preset);
+                  },
+                  child: Text(
+                    strings.audioFadeDuration(preset),
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static int _fadeDurationMs(double value) =>
+      ((value / ConversionAudioFade.stepMs).round() *
+              ConversionAudioFade.stepMs)
+          .clamp(ConversionAudioFade.minEnabledMs, ConversionAudioFade.maxMs);
+}
+
+String _audioFadeSummary(ConversionController conversion, MfStrings strings) {
+  final parts = <String>[
+    if (conversion.audioFadeInEnabled)
+      '${strings.fadeIn} ${strings.audioFadeDuration(conversion.audioFadeInDurationMs)}',
+    if (conversion.audioFadeOutEnabled)
+      '${strings.fadeOut} ${strings.audioFadeDuration(conversion.audioFadeOutDurationMs)}',
+  ];
+  return parts.isEmpty ? strings.disabled : parts.join(' · ');
 }
 
 class _DestinationEditor extends StatefulWidget {

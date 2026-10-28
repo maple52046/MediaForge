@@ -87,6 +87,8 @@ pub enum ErrorCode {
     InvalidTrimRange,
     /// A requested playback rate violates supported bounds or increments.
     InvalidPlaybackRate,
+    /// A requested audio fade violates supported bounds or increments.
+    InvalidAudioFadeDuration,
     /// The destination exists without overwrite approval.
     OutputExists,
     /// The temporary destination could not be created.
@@ -114,6 +116,7 @@ impl ErrorCode {
             Self::EncoderUnavailable => "encoderUnavailable",
             Self::InvalidTrimRange => "invalidTrimRange",
             Self::InvalidPlaybackRate => "invalidPlaybackRate",
+            Self::InvalidAudioFadeDuration => "invalidAudioFadeDuration",
             Self::OutputExists => "outputExists",
             Self::OutputCreateFailed => "outputCreateFailed",
             Self::DiskWriteFailed => "diskWriteFailed",
@@ -160,6 +163,7 @@ impl From<MediaError> for ApplicationError {
             MediaError::EncoderUnavailable(_) => ErrorCode::EncoderUnavailable,
             MediaError::InvalidTrimRange { .. } => ErrorCode::InvalidTrimRange,
             MediaError::InvalidPlaybackRate { .. } => ErrorCode::InvalidPlaybackRate,
+            MediaError::InvalidAudioFadeDuration { .. } => ErrorCode::InvalidAudioFadeDuration,
             MediaError::OutputExists(_) => ErrorCode::OutputExists,
             MediaError::OutputCreateFailed(_) => ErrorCode::OutputCreateFailed,
             MediaError::DiskWriteFailed(_) => ErrorCode::DiskWriteFailed,
@@ -473,8 +477,8 @@ mod tests {
     use std::sync::Condvar;
 
     use mediaforge_core::{
-        AudioQuality, BackendCapabilities, MediaInfo, OutputMode, PlaybackRate, TrimRange,
-        VideoQuality,
+        AudioFade, AudioQuality, BackendCapabilities, MediaInfo, OutputMode, PlaybackRate,
+        TrimRange, VideoQuality,
     };
 
     use super::*;
@@ -608,6 +612,7 @@ mod tests {
             audio_quality: AudioQuality::Medium,
             video_playback_rate: PlaybackRate::default(),
             audio_playback_rate: PlaybackRate::default(),
+            audio_fade: AudioFade::default(),
             overwrite: false,
         }
     }

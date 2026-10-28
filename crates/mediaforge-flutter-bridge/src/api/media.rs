@@ -8,9 +8,9 @@ use mediaforge_application::{
     JobState, MediaFacade,
 };
 use mediaforge_core::{
-    propose_output_path, AudioQuality, AudioStreamInfo, BackendCapabilities, MediaBackend,
-    MediaError, MediaInfo, OutputMode, PlaybackRate, TranscodeRequest, TrimRange, VideoQuality,
-    VideoStreamInfo,
+    propose_output_path, AudioFade, AudioQuality, AudioStreamInfo, BackendCapabilities,
+    MediaBackend, MediaError, MediaInfo, OutputMode, PlaybackRate, TranscodeRequest, TrimRange,
+    VideoQuality, VideoStreamInfo,
 };
 use mediaforge_ffmpeg::FfmpegBackend;
 
@@ -111,6 +111,10 @@ pub struct StartTranscodeRequestDto {
     pub video_playback_rate_percent: u16,
     /// Audio playback rate as a validated integer percentage.
     pub audio_playback_rate_percent: u16,
+    /// Requested fade-in duration in integer milliseconds, or zero when disabled.
+    pub audio_fade_in_ms: u16,
+    /// Requested fade-out duration in integer milliseconds, or zero when disabled.
+    pub audio_fade_out_ms: u16,
     /// Inclusive trim start in integer milliseconds.
     pub start_ms: u64,
     /// Exclusive trim end in integer milliseconds.
@@ -223,6 +227,8 @@ pub enum MediaBridgeErrorCode {
     InvalidTrimRange,
     /// A playback rate violates supported bounds or increments.
     InvalidPlaybackRate,
+    /// An audio fade duration violates supported bounds or increments.
+    InvalidAudioFadeDuration,
     /// The destination exists without overwrite approval.
     OutputExists,
     /// A protected temporary output could not be created.
@@ -481,6 +487,8 @@ fn build_transcode_request(
         audio_quality,
         video_playback_rate_percent,
         audio_playback_rate_percent,
+        audio_fade_in_ms,
+        audio_fade_out_ms,
         start_ms,
         end_ms,
         overwrite,
@@ -500,6 +508,8 @@ fn build_transcode_request(
         video_playback_rate: PlaybackRate::new(video_playback_rate_percent)
             .map_err(ApplicationError::from)?,
         audio_playback_rate: PlaybackRate::new(audio_playback_rate_percent)
+            .map_err(ApplicationError::from)?,
+        audio_fade: AudioFade::new(audio_fade_in_ms, audio_fade_out_ms)
             .map_err(ApplicationError::from)?,
         overwrite,
     })
@@ -757,6 +767,7 @@ impl From<ErrorCode> for MediaBridgeErrorCode {
             ErrorCode::EncoderUnavailable => Self::EncoderUnavailable,
             ErrorCode::InvalidTrimRange => Self::InvalidTrimRange,
             ErrorCode::InvalidPlaybackRate => Self::InvalidPlaybackRate,
+            ErrorCode::InvalidAudioFadeDuration => Self::InvalidAudioFadeDuration,
             ErrorCode::OutputExists => Self::OutputExists,
             ErrorCode::OutputCreateFailed => Self::OutputCreateFailed,
             ErrorCode::DiskWriteFailed => Self::DiskWriteFailed,
@@ -853,6 +864,8 @@ mod tests {
         assert_eq!(domain.audio_quality, AudioQuality::Medium);
         assert_eq!(domain.video_playback_rate.percent(), 100);
         assert_eq!(domain.audio_playback_rate.percent(), 100);
+        assert_eq!(domain.audio_fade.fade_in_ms(), 500);
+        assert_eq!(domain.audio_fade.fade_out_ms(), 1_000);
         assert!(!domain.overwrite);
 
         let invalid_trim = build_transcode_request(
@@ -879,6 +892,21 @@ mod tests {
         )
         .expect_err("a playback rate outside the five-percent step must fail");
         assert_eq!(invalid_rate.code, MediaBridgeErrorCode::InvalidPlaybackRate);
+
+        let invalid_fade = build_transcode_request(
+            StartTranscodeRequestDto {
+                audio_fade_in_ms: 150,
+                ..request.clone()
+            },
+            PathBuf::from("/tmp/input.mov"),
+            PathBuf::from("/tmp/output.mp4"),
+            &media,
+        )
+        .expect_err("an audio fade outside the hundred-millisecond step must fail");
+        assert_eq!(
+            invalid_fade.code,
+            MediaBridgeErrorCode::InvalidAudioFadeDuration
+        );
 
         let video_only = build_transcode_request(
             StartTranscodeRequestDto {
@@ -965,6 +993,8 @@ mod tests {
             audio_quality: MediaAudioQuality::Medium,
             video_playback_rate_percent: 100,
             audio_playback_rate_percent: 100,
+            audio_fade_in_ms: 500,
+            audio_fade_out_ms: 1_000,
             start_ms: 200,
             end_ms: 1_200,
             overwrite: false,

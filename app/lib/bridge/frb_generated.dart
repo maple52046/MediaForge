@@ -768,8 +768,8 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
   StartTranscodeRequestDto dco_decode_start_transcode_request_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
     return StartTranscodeRequestDto(
       inputPath: dco_decode_String(arr[0]),
       outputPath: dco_decode_String(arr[1]),
@@ -778,9 +778,11 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
       audioQuality: dco_decode_media_audio_quality(arr[4]),
       videoPlaybackRatePercent: dco_decode_u_16(arr[5]),
       audioPlaybackRatePercent: dco_decode_u_16(arr[6]),
-      startMs: dco_decode_CastedPrimitive_u_64(arr[7]),
-      endMs: dco_decode_CastedPrimitive_u_64(arr[8]),
-      overwrite: dco_decode_bool(arr[9]),
+      audioFadeInMs: dco_decode_u_16(arr[7]),
+      audioFadeOutMs: dco_decode_u_16(arr[8]),
+      startMs: dco_decode_CastedPrimitive_u_64(arr[9]),
+      endMs: dco_decode_CastedPrimitive_u_64(arr[10]),
+      overwrite: dco_decode_bool(arr[11]),
     );
   }
 
@@ -1296,6 +1298,8 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
     final var_audioQuality = sse_decode_media_audio_quality(deserializer);
     final var_videoPlaybackRatePercent = sse_decode_u_16(deserializer);
     final var_audioPlaybackRatePercent = sse_decode_u_16(deserializer);
+    final var_audioFadeInMs = sse_decode_u_16(deserializer);
+    final var_audioFadeOutMs = sse_decode_u_16(deserializer);
     final var_startMs = sse_decode_CastedPrimitive_u_64(deserializer);
     final var_endMs = sse_decode_CastedPrimitive_u_64(deserializer);
     final var_overwrite = sse_decode_bool(deserializer);
@@ -1307,6 +1311,8 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
       audioQuality: var_audioQuality,
       videoPlaybackRatePercent: var_videoPlaybackRatePercent,
       audioPlaybackRatePercent: var_audioPlaybackRatePercent,
+      audioFadeInMs: var_audioFadeInMs,
+      audioFadeOutMs: var_audioFadeOutMs,
       startMs: var_startMs,
       endMs: var_endMs,
       overwrite: var_overwrite,
@@ -1806,6 +1812,8 @@ class MediaForgeRustLibApiImpl extends MediaForgeRustLibApiImplPlatform
     sse_encode_media_audio_quality(self.audioQuality, serializer);
     sse_encode_u_16(self.videoPlaybackRatePercent, serializer);
     sse_encode_u_16(self.audioPlaybackRatePercent, serializer);
+    sse_encode_u_16(self.audioFadeInMs, serializer);
+    sse_encode_u_16(self.audioFadeOutMs, serializer);
     sse_encode_CastedPrimitive_u_64(self.startMs, serializer);
     sse_encode_CastedPrimitive_u_64(self.endMs, serializer);
     sse_encode_bool(self.overwrite, serializer);

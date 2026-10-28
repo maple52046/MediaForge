@@ -42,6 +42,8 @@ void main() {
     expect(request.videoQuality, ConversionVideoQuality.balanced);
     expect(request.videoPlaybackRatePercent, 100);
     expect(request.audioPlaybackRatePercent, 100);
+    expect(request.audioFadeInMs, 0);
+    expect(request.audioFadeOutMs, 0);
     expect(request.startMs, 200);
     expect(request.endMs, 1200);
     expect(request.overwrite, isFalse);
@@ -116,6 +118,75 @@ void main() {
         () => controller.selectAudioPlaybackRate(405),
         throwsArgumentError,
       );
+    },
+  );
+
+  test(
+    'audio fades configure independently, survive modes, and reset',
+    () async {
+      final conversionService = _FakeConversionService();
+      final controller = ConversionController(
+        service: conversionService,
+        outputPathService: const _ModeProbeService(),
+      );
+      addTearDown(() async {
+        await controller.close();
+        controller.dispose();
+        await conversionService.close();
+      });
+      controller.setMedia(_media());
+      await _drainEvents();
+
+      expect(controller.audioFadeInEnabled, isFalse);
+      expect(controller.audioFadeOutEnabled, isFalse);
+      expect(controller.audioFadeInDurationMs, 1000);
+      expect(controller.audioFadeOutDurationMs, 1000);
+      controller.setAudioFadeInEnabled(true);
+      controller.setAudioFadeOutEnabled(true);
+      controller.selectAudioFadeInDuration(500);
+      controller.selectAudioFadeOutDuration(2000);
+      expect(controller.requestedAudioFadeInMs, 500);
+      expect(controller.requestedAudioFadeOutMs, 2000);
+
+      final effective = controller.effectiveAudioFadeFor(1000);
+      expect(effective.fadeInMs, 200);
+      expect(effective.fadeOutMs, 800);
+      expect(effective.wasShortened, isTrue);
+
+      controller.selectMode(MediaOutputMode.videoOnly);
+      await _drainEvents();
+      expect(controller.audioFadeInEnabled, isTrue);
+      expect(controller.audioFadeOutEnabled, isTrue);
+      controller.selectMode(MediaOutputMode.audioOnly);
+      await _drainEvents();
+      expect(controller.canStart, isTrue);
+      await controller.start(startMs: 0, endMs: 1000);
+      expect(conversionService.requests.single.audioFadeInMs, 500);
+      expect(conversionService.requests.single.audioFadeOutMs, 2000);
+
+      expect(
+        () => controller.selectAudioFadeInDuration(0),
+        throwsArgumentError,
+      );
+      expect(
+        () => controller.selectAudioFadeOutDuration(150),
+        throwsArgumentError,
+      );
+
+      conversionService.emit(
+        const ConversionJobEvent(
+          kind: ConversionJobEventKind.completed,
+          jobId: 7,
+          outputPath: '/tmp/source.mp3',
+        ),
+      );
+      await _drainEvents();
+      controller.setMedia(_media());
+      await _drainEvents();
+      expect(controller.audioFadeInEnabled, isFalse);
+      expect(controller.audioFadeOutEnabled, isFalse);
+      expect(controller.audioFadeInDurationMs, 1000);
+      expect(controller.audioFadeOutDurationMs, 1000);
     },
   );
 
@@ -401,6 +472,10 @@ void main() {
       controller.setPlaybackRatesLinked(false);
       controller.selectVideoPlaybackRate(150);
       controller.selectAudioPlaybackRate(75);
+      controller.setAudioFadeInEnabled(true);
+      controller.setAudioFadeOutEnabled(true);
+      controller.selectAudioFadeInDuration(500);
+      controller.selectAudioFadeOutDuration(3000);
       await _drainEvents();
 
       await controller.start(startMs: 100, endMs: 1200);
@@ -408,6 +483,8 @@ void main() {
       expect(conversionService.requests.single.overwrite, isFalse);
       expect(conversionService.requests.single.videoPlaybackRatePercent, 150);
       expect(conversionService.requests.single.audioPlaybackRatePercent, 75);
+      expect(conversionService.requests.single.audioFadeInMs, 500);
+      expect(conversionService.requests.single.audioFadeOutMs, 3000);
 
       await controller.confirmOverwrite();
       expect(controller.overwriteConfirmationRequired, isFalse);
@@ -416,6 +493,8 @@ void main() {
       expect(conversionService.requests.last.endMs, 1200);
       expect(conversionService.requests.last.videoPlaybackRatePercent, 150);
       expect(conversionService.requests.last.audioPlaybackRatePercent, 75);
+      expect(conversionService.requests.last.audioFadeInMs, 500);
+      expect(conversionService.requests.last.audioFadeOutMs, 3000);
       conversionService.emit(
         const ConversionJobEvent(
           kind: ConversionJobEventKind.completed,
