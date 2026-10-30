@@ -139,12 +139,12 @@ void main() {
 
       expect(controller.audioFadeInEnabled, isFalse);
       expect(controller.audioFadeOutEnabled, isFalse);
-      expect(controller.audioFadeInDurationMs, 1000);
-      expect(controller.audioFadeOutDurationMs, 1000);
-      controller.setAudioFadeInEnabled(true);
-      controller.setAudioFadeOutEnabled(true);
+      expect(controller.audioFadeInDurationMs, 0);
+      expect(controller.audioFadeOutDurationMs, 0);
       controller.selectAudioFadeInDuration(500);
       controller.selectAudioFadeOutDuration(2000);
+      expect(controller.audioFadeInEnabled, isTrue);
+      expect(controller.audioFadeOutEnabled, isTrue);
       expect(controller.requestedAudioFadeInMs, 500);
       expect(controller.requestedAudioFadeOutMs, 2000);
 
@@ -152,6 +152,11 @@ void main() {
       expect(effective.fadeInMs, 200);
       expect(effective.fadeOutMs, 800);
       expect(effective.wasShortened, isTrue);
+
+      controller.selectAudioFadeInDuration(0);
+      expect(controller.audioFadeInEnabled, isFalse);
+      expect(controller.requestedAudioFadeInMs, 0);
+      controller.selectAudioFadeInDuration(500);
 
       controller.selectMode(MediaOutputMode.videoOnly);
       await _drainEvents();
@@ -164,10 +169,6 @@ void main() {
       expect(conversionService.requests.single.audioFadeInMs, 500);
       expect(conversionService.requests.single.audioFadeOutMs, 2000);
 
-      expect(
-        () => controller.selectAudioFadeInDuration(0),
-        throwsArgumentError,
-      );
       expect(
         () => controller.selectAudioFadeOutDuration(150),
         throwsArgumentError,
@@ -185,8 +186,8 @@ void main() {
       await _drainEvents();
       expect(controller.audioFadeInEnabled, isFalse);
       expect(controller.audioFadeOutEnabled, isFalse);
-      expect(controller.audioFadeInDurationMs, 1000);
-      expect(controller.audioFadeOutDurationMs, 1000);
+      expect(controller.audioFadeInDurationMs, 0);
+      expect(controller.audioFadeOutDurationMs, 0);
     },
   );
 
@@ -472,8 +473,6 @@ void main() {
       controller.setPlaybackRatesLinked(false);
       controller.selectVideoPlaybackRate(150);
       controller.selectAudioPlaybackRate(75);
-      controller.setAudioFadeInEnabled(true);
-      controller.setAudioFadeOutEnabled(true);
       controller.selectAudioFadeInDuration(500);
       controller.selectAudioFadeOutDuration(3000);
       await _drainEvents();

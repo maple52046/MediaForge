@@ -60,9 +60,6 @@ abstract final class ConversionAudioFade {
   /// Supported slider and request increment in milliseconds.
   static const int stepMs = 100;
 
-  /// Default retained duration when an effect is first enabled.
-  static const int defaultMs = 1000;
-
   /// Returns whether [durationMs] is representable by the request contract.
   static bool isSupported(int durationMs) =>
       durationMs == 0 ||

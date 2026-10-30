@@ -94,10 +94,8 @@ class ConversionController extends ChangeNotifier {
   bool _playbackRatesLinked = true;
   int _videoPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
   int _audioPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
-  bool _audioFadeInEnabled = false;
-  bool _audioFadeOutEnabled = false;
-  int _audioFadeInDurationMs = ConversionAudioFade.defaultMs;
-  int _audioFadeOutDurationMs = ConversionAudioFade.defaultMs;
+  int _audioFadeInDurationMs = 0;
+  int _audioFadeOutDurationMs = 0;
   bool _converting;
   double _progress;
   ConversionJobState _jobState;
@@ -142,27 +140,26 @@ class ConversionController extends ChangeNotifier {
   int get audioPlaybackRatePercent => _audioPlaybackRatePercent;
 
   /// Whether audio fade-in is enabled for outputs containing audio.
-  bool get audioFadeInEnabled => _audioFadeInEnabled;
+  bool get audioFadeInEnabled => _audioFadeInDurationMs > 0;
 
   /// Whether audio fade-out is enabled for outputs containing audio.
-  bool get audioFadeOutEnabled => _audioFadeOutEnabled;
+  bool get audioFadeOutEnabled => _audioFadeOutDurationMs > 0;
 
-  /// Retained fade-in duration used when the effect is enabled.
+  /// Selected fade-in duration, where zero disables the effect.
   int get audioFadeInDurationMs => _audioFadeInDurationMs;
 
-  /// Retained fade-out duration used when the effect is enabled.
+  /// Selected fade-out duration, where zero disables the effect.
   int get audioFadeOutDurationMs => _audioFadeOutDurationMs;
 
   /// Requested fade-in duration sent across the conversion boundary.
-  int get requestedAudioFadeInMs =>
-      _audioFadeInEnabled ? _audioFadeInDurationMs : 0;
+  int get requestedAudioFadeInMs => _audioFadeInDurationMs;
 
   /// Requested fade-out duration sent across the conversion boundary.
-  int get requestedAudioFadeOutMs =>
-      _audioFadeOutEnabled ? _audioFadeOutDurationMs : 0;
+  int get requestedAudioFadeOutMs => _audioFadeOutDurationMs;
 
   /// Whether at least one audio fade effect is active.
-  bool get hasAudioFade => _audioFadeInEnabled || _audioFadeOutEnabled;
+  bool get hasAudioFade =>
+      _audioFadeInDurationMs > 0 || _audioFadeOutDurationMs > 0;
 
   /// Resolves effective fades for the current trim and audio rate.
   EffectiveAudioFadeDurations effectiveAudioFadeFor(int selectedDurationMs) =>
@@ -261,10 +258,8 @@ class ConversionController extends ChangeNotifier {
     _playbackRatesLinked = true;
     _videoPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
     _audioPlaybackRatePercent = ConversionPlaybackRate.normalPercent;
-    _audioFadeInEnabled = false;
-    _audioFadeOutEnabled = false;
-    _audioFadeInDurationMs = ConversionAudioFade.defaultMs;
-    _audioFadeOutDurationMs = ConversionAudioFade.defaultMs;
+    _audioFadeInDurationMs = 0;
+    _audioFadeOutDurationMs = 0;
     _completedOutputPath = null;
     _failure = null;
     _pendingOverwriteRequest = null;
@@ -394,29 +389,7 @@ class ConversionController extends ChangeNotifier {
     _notifyListeners();
   }
 
-  /// Enables or disables fade-in while retaining its configured duration.
-  void setAudioFadeInEnabled(bool enabled) {
-    if (_converting || _audioFadeInEnabled == enabled) {
-      return;
-    }
-    _audioFadeInEnabled = enabled;
-    _completedOutputPath = null;
-    _failure = null;
-    _notifyListeners();
-  }
-
-  /// Enables or disables fade-out while retaining its configured duration.
-  void setAudioFadeOutEnabled(bool enabled) {
-    if (_converting || _audioFadeOutEnabled == enabled) {
-      return;
-    }
-    _audioFadeOutEnabled = enabled;
-    _completedOutputPath = null;
-    _failure = null;
-    _notifyListeners();
-  }
-
-  /// Selects the retained fade-in duration in integer milliseconds.
+  /// Selects fade-in duration, applying zero as the disabled state.
   void selectAudioFadeInDuration(int durationMs) {
     _validateAudioFadeDuration(durationMs);
     if (_converting || _audioFadeInDurationMs == durationMs) {
@@ -428,7 +401,7 @@ class ConversionController extends ChangeNotifier {
     _notifyListeners();
   }
 
-  /// Selects the retained fade-out duration in integer milliseconds.
+  /// Selects fade-out duration, applying zero as the disabled state.
   void selectAudioFadeOutDuration(int durationMs) {
     _validateAudioFadeDuration(durationMs);
     if (_converting || _audioFadeOutDurationMs == durationMs) {
@@ -656,11 +629,11 @@ class ConversionController extends ChangeNotifier {
   }
 
   static void _validateAudioFadeDuration(int durationMs) {
-    if (durationMs == 0 || !ConversionAudioFade.isSupported(durationMs)) {
+    if (!ConversionAudioFade.isSupported(durationMs)) {
       throw ArgumentError.value(
         durationMs,
         'durationMs',
-        'must be between 100 and 10000 in hundred-millisecond increments',
+        'must be zero or between 100 and 10000 in hundred-millisecond increments',
       );
     }
   }

@@ -2508,18 +2508,14 @@ class _AudioFadePopover extends StatelessWidget {
           _AudioFadeEditor(
             controlKey: 'audio-fade-in',
             label: strings.fadeIn,
-            enabled: conversion.audioFadeInEnabled,
             durationMs: conversion.audioFadeInDurationMs,
-            onEnabledChanged: conversion.setAudioFadeInEnabled,
             onCommitted: conversion.selectAudioFadeInDuration,
           ),
           const SizedBox(height: MfSpacing.md),
           _AudioFadeEditor(
             controlKey: 'audio-fade-out',
             label: strings.fadeOut,
-            enabled: conversion.audioFadeOutEnabled,
             durationMs: conversion.audioFadeOutDurationMs,
-            onEnabledChanged: conversion.setAudioFadeOutEnabled,
             onCommitted: conversion.selectAudioFadeOutDuration,
           ),
           if (effective.wasShortened) ...[
@@ -2546,17 +2542,13 @@ class _AudioFadeEditor extends StatefulWidget {
   const _AudioFadeEditor({
     required this.controlKey,
     required this.label,
-    required this.enabled,
     required this.durationMs,
-    required this.onEnabledChanged,
     required this.onCommitted,
   });
 
   final String controlKey;
   final String label;
-  final bool enabled;
   final int durationMs;
-  final ValueChanged<bool> onEnabledChanged;
   final ValueChanged<int> onCommitted;
 
   @override
@@ -2584,7 +2576,6 @@ class _AudioFadeEditorState extends State<_AudioFadeEditor> {
   @override
   Widget build(BuildContext context) {
     final strings = MfStrings.of(context);
-    final stateLabel = widget.enabled ? strings.enabled : strings.disabled;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2597,25 +2588,12 @@ class _AudioFadeEditorState extends State<_AudioFadeEditor> {
               ),
             ),
             Text(
-              strings.audioFadeDuration(_draftDurationMs),
+              _audioFadeValue(strings, _draftDurationMs),
               key: Key('${widget.controlKey}-value'),
               style: TextStyle(
                 color: MfPalette.foreground,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: MfSpacing.xs),
-            Semantics(
-              button: true,
-              toggled: widget.enabled,
-              label: '${widget.label}: $stateLabel',
-              child: ShadButton.outline(
-                key: Key('${widget.controlKey}-enabled'),
-                height: 26,
-                padding: const EdgeInsets.symmetric(horizontal: MfSpacing.xs),
-                onPressed: () => widget.onEnabledChanged(!widget.enabled),
-                child: Text(stateLabel),
               ),
             ),
           ],
@@ -2624,14 +2602,12 @@ class _AudioFadeEditorState extends State<_AudioFadeEditor> {
         ShadSlider(
           key: Key('${widget.controlKey}-slider-${widget.durationMs}'),
           initialValue: widget.durationMs.toDouble(),
-          min: ConversionAudioFade.minEnabledMs.toDouble(),
+          min: 0,
           max: ConversionAudioFade.maxMs.toDouble(),
-          divisions:
-              (ConversionAudioFade.maxMs - ConversionAudioFade.minEnabledMs) ~/
-              ConversionAudioFade.stepMs,
-          label: strings.audioFadeDuration(_draftDurationMs),
+          divisions: ConversionAudioFade.maxMs ~/ ConversionAudioFade.stepMs,
+          label: _audioFadeValue(strings, _draftDurationMs),
           semanticFormatterCallback: (double value) =>
-              '${widget.label} ${strings.audioFadeDuration(_fadeDurationMs(value))}',
+              '${widget.label} ${_audioFadeValue(strings, _fadeDurationMs(value))}',
           onChanged: (double value) {
             setState(() => _draftDurationMs = _fadeDurationMs(value));
           },
@@ -2672,8 +2648,11 @@ class _AudioFadeEditorState extends State<_AudioFadeEditor> {
   static int _fadeDurationMs(double value) =>
       ((value / ConversionAudioFade.stepMs).round() *
               ConversionAudioFade.stepMs)
-          .clamp(ConversionAudioFade.minEnabledMs, ConversionAudioFade.maxMs);
+          .clamp(0, ConversionAudioFade.maxMs);
 }
+
+String _audioFadeValue(MfStrings strings, int durationMs) =>
+    durationMs == 0 ? strings.disabled : strings.audioFadeDuration(durationMs);
 
 String _audioFadeSummary(ConversionController conversion, MfStrings strings) {
   final parts = <String>[

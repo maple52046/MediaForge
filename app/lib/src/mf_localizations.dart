@@ -217,9 +217,6 @@ class MfStrings {
   /// Fade-out effect label.
   String get fadeOut => _zh ? '淡出' : 'Fade out';
 
-  /// Enabled control state.
-  String get enabled => _zh ? '啟用' : 'On';
-
   /// Disabled control state.
   String get disabled => _zh ? '關閉' : 'Off';
 

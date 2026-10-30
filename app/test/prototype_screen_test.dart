@@ -143,7 +143,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    conversion.setAudioFadeInEnabled(true);
+    conversion.selectAudioFadeInDuration(1000);
     await tester.pumpAndSettle();
     expect(
       find.text(
@@ -195,10 +195,27 @@ void main() {
       await tester.tap(find.byKey(const Key('audio-fade-settings')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('audio-fade-popover')), findsOneWidget);
-      expect(find.bySemanticsLabel('Fade in: Off'), findsOneWidget);
+      expect(find.byKey(const Key('audio-fade-in-enabled')), findsNothing);
+      expect(find.byKey(const Key('audio-fade-out-enabled')), findsNothing);
+      expect(
+        tester
+            .widget<ShadSlider>(find.byKey(const Key('audio-fade-in-slider-0')))
+            .min,
+        0,
+      );
+      expect(
+        tester
+            .widget<ShadSlider>(find.byKey(const Key('audio-fade-in-slider-0')))
+            .max,
+        10000,
+      );
+      expect(
+        tester
+            .widget<ShadSlider>(find.byKey(const Key('audio-fade-in-slider-0')))
+            .divisions,
+        100,
+      );
 
-      await tester.tap(find.byKey(const Key('audio-fade-in-enabled')));
-      await tester.tap(find.byKey(const Key('audio-fade-out-enabled')));
       await tester.tap(find.byKey(const Key('audio-fade-in-preset-500')));
       await tester.tap(find.byKey(const Key('audio-fade-out-preset-3000')));
       await tester.pumpAndSettle();
@@ -212,6 +229,17 @@ void main() {
       expect(preview.audioFadeEnvelope!.endMs, 3606);
       expect(preview.positionMs, 842);
       expect(preview.seekCommands, isEmpty);
+
+      await tester.drag(
+        find.byKey(const Key('audio-fade-in-slider-500')),
+        const Offset(-1000, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(conversion.audioFadeInEnabled, isFalse);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('audio-fade-in-value'))).data,
+        'Off',
+      );
 
       conversion.selectAudioFadeInDuration(10000);
       conversion.selectAudioFadeOutDuration(10000);
