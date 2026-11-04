@@ -12,7 +12,10 @@ enum MfIconData {
   play('play-outlined.svg'),
 
   /// Pause preview playback.
-  pause('pause-outlined.svg');
+  pause('pause-outlined.svg'),
+
+  /// Open detailed settings for the adjacent value.
+  settings('settings-adjustments-outlined.svg');
 
   const MfIconData(this.fileName);
 

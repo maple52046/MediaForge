@@ -2100,6 +2100,89 @@ class _OptionRowContent extends StatelessWidget {
   }
 }
 
+class _OptionSettingsRow extends StatelessWidget {
+  const _OptionSettingsRow({
+    required this.buttonKey,
+    required this.label,
+    required this.value,
+    required this.semanticLabel,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final Key buttonKey;
+  final String label;
+  final String value;
+  final String semanticLabel;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 26,
+      child: Row(
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: MfPalette.muted, fontSize: 11),
+              ),
+            ),
+          ),
+          const SizedBox(width: MfSpacing.sm),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                final maxTextWidth =
+                    constraints.maxWidth - MfSpacing.xxs * 2 - 13;
+                return Align(
+                  alignment: Alignment.centerRight,
+                  child: Semantics(
+                    button: true,
+                    enabled: enabled,
+                    label: semanticLabel,
+                    excludeSemantics: true,
+                    child: ShadButton.ghost(
+                      key: buttonKey,
+                      height: 26,
+                      gap: MfSpacing.xxs,
+                      padding: const EdgeInsets.only(left: MfSpacing.xxs),
+                      onPressed: enabled ? onPressed : null,
+                      trailing: MfIcon(
+                        MfIconData.settings,
+                        size: 13,
+                        color: enabled ? MfPalette.muted : MfPalette.faint,
+                      ),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxTextWidth),
+                        child: Text(
+                          value,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                            color: MfPalette.foreground,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PlaybackSpeedControl extends StatefulWidget {
   const _PlaybackSpeedControl({required this.conversion});
 
@@ -2142,25 +2225,13 @@ class _PlaybackSpeedControlState extends State<_PlaybackSpeedControl> {
       padding: EdgeInsets.zero,
       popover: (BuildContext context) =>
           _PlaybackSpeedPopover(conversion: widget.conversion),
-      child: Semantics(
-        button: true,
-        label: '${strings.playbackSpeed}: $summary',
-        child: ShadButton.ghost(
-          key: const Key('playback-speed-settings'),
-          width: double.infinity,
-          height: 26,
-          padding: EdgeInsets.zero,
-          onPressed: widget.conversion.converting
-              ? null
-              : _popoverController.toggle,
-          child: SizedBox(
-            width: 320,
-            child: _OptionRowContent(
-              label: strings.playbackSpeed,
-              value: summary,
-            ),
-          ),
-        ),
+      child: _OptionSettingsRow(
+        buttonKey: const Key('playback-speed-settings'),
+        label: strings.playbackSpeed,
+        value: summary,
+        semanticLabel: '${strings.playbackSpeed}: $summary',
+        enabled: !widget.conversion.converting,
+        onPressed: _popoverController.toggle,
       ),
     );
   }
@@ -2449,22 +2520,13 @@ class _AudioFadeControlState extends State<_AudioFadeControl> {
         conversion: widget.conversion,
         selectedDurationMs: widget.selectedDurationMs,
       ),
-      child: Semantics(
-        button: true,
-        label: '${strings.audioFades}: $summary',
-        child: ShadButton.ghost(
-          key: const Key('audio-fade-settings'),
-          width: double.infinity,
-          height: 26,
-          padding: EdgeInsets.zero,
-          onPressed: widget.conversion.converting
-              ? null
-              : _popoverController.toggle,
-          child: SizedBox(
-            width: 320,
-            child: _OptionRowContent(label: strings.audioFades, value: summary),
-          ),
-        ),
+      child: _OptionSettingsRow(
+        buttonKey: const Key('audio-fade-settings'),
+        label: strings.audioFades,
+        value: summary,
+        semanticLabel: '${strings.audioFades}: $summary',
+        enabled: !widget.conversion.converting,
+        onPressed: _popoverController.toggle,
       ),
     );
   }

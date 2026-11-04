@@ -120,7 +120,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playback-speed-settings')));
+    final speedSettings = find.byKey(const Key('playback-speed-settings'));
+    final speedSettingsIcon = find.descendant(
+      of: speedSettings,
+      matching: find.byType(MfIcon),
+    );
+    expect(speedSettingsIcon, findsOneWidget);
+    expect(tester.widget<MfIcon>(speedSettingsIcon).icon, MfIconData.settings);
+    await tester.tap(find.text('Playback speed'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('playback-speed-popover')), findsNothing);
+
+    await tester.tap(speedSettings);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('playback-speed-popover')), findsOneWidget);
 
@@ -192,7 +203,18 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('audio-fade-settings')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('audio-fade-settings')));
+      final fadeSettings = find.byKey(const Key('audio-fade-settings'));
+      final fadeSettingsIcon = find.descendant(
+        of: fadeSettings,
+        matching: find.byType(MfIcon),
+      );
+      expect(fadeSettingsIcon, findsOneWidget);
+      expect(tester.widget<MfIcon>(fadeSettingsIcon).icon, MfIconData.settings);
+      await tester.tap(find.text('Audio fades'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('audio-fade-popover')), findsNothing);
+
+      await tester.tap(fadeSettings);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('audio-fade-popover')), findsOneWidget);
       expect(find.byKey(const Key('audio-fade-in-enabled')), findsNothing);
@@ -298,9 +320,16 @@ void main() {
     final optionValue = tester.getRect(find.text('MP4'));
     final speedLabel = tester.getRect(find.text('播放速度'));
     final speedValue = tester.getRect(find.text('1× · 同步'));
+    final speedIcon = tester.getRect(
+      find.descendant(
+        of: find.byKey(const Key('playback-speed-settings')),
+        matching: find.byType(MfIcon),
+      ),
+    );
 
     expect(speedLabel.left, moreOrLessEquals(optionLabel.left));
-    expect(speedValue.right, moreOrLessEquals(optionValue.right));
+    expect(speedIcon.right, moreOrLessEquals(optionValue.right));
+    expect(speedIcon.left - speedValue.right, moreOrLessEquals(MfSpacing.xxs));
     expect(speedLabel.center.dy, moreOrLessEquals(speedValue.center.dy));
     expect(tester.takeException(), isNull);
   });
